@@ -157,8 +157,8 @@ async function finish(s: CheckSession) {
 export async function authorUnitGate(unit: any, env: string, missedLines?: string[]): Promise<{ items: Item[]; check_type: string }> {
   const isText = unit.payload?.dialogue?.length;
   const spec = isText
-    ? `Unit = Assimil lesson ${unit.seq} "${unit.title}". Dialogue: ${JSON.stringify(unit.payload.dialogue)}. Notes: ${unit.payload.notes ?? ""}.
-Write 5 items: 3 typed back-translations (EN prompt -> exact FR line from the dialogue; accept natural variants), 1 dictation (a dialogue line ≤10 words), 1 typed transform (change person/tense/negation of a dialogue line, tagged to the competency it tests).${missedLines?.length ? ` Include these previously missed lines: ${JSON.stringify(missedLines)}.` : ""}`
+    ? `Unit = ${unit.resource_id === "assimil" ? "Assimil" : "beginner"} lesson ${unit.seq} "${unit.title}". Dialogue: ${JSON.stringify(unit.payload.dialogue)}. Notes: ${unit.payload.notes ?? ""}.
+Write 5 items: 3 typed back-translations (EN prompt -> exact FR line from the dialogue; accept natural variants), 1 dictation (a dialogue line ≤10 words), 1 typed transform (change person/tense/negation of a dialogue line, tagged to the competency it tests${unit.payload?.codes?.length ? `; lesson codes: ${unit.payload.codes.join(", ")}` : ""}). Prompts in ENGLISH (the learner is a beginner).${missedLines?.length ? ` Include these previously missed lines: ${JSON.stringify(missedLines)}.` : ""}`
     : `Unit = ${unit.resource_id} episode "${unit.title}". Summary/description: ${unit.payload?.summary ?? unit.payload?.description ?? ""}. Key vocab: ${JSON.stringify(unit.payload?.key_vocab ?? [])}.
 Write 4 items: 2 comprehension MCQs in French on the topic (4 options each, based only on the summary), 1 typed vocab item (EN -> FR from key vocab), 1 voice item: "Résume l'épisode en deux phrases" (expected = a model 2-sentence summary; accept = []).`;
   const r = await ask<{ items: Item[] }>("EXAMINER", `${spec}\nEnvironment: ${env} (patrol = short typed/tap answers only).

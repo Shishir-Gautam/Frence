@@ -87,7 +87,7 @@ export async function bumpErrorPattern(category: string, kind: string, example?:
 export async function plannerSnapshot() {
   const learner = await getLearner();
   const clb = await currentClb();
-  const daysIn = Math.floor((Date.now() - new Date(learner.start_date).getTime()) / 86400000);
+  const daysIn = Math.max(0, Math.floor((Date.now() - new Date(learner.start_date).getTime()) / 86400000));
   const grid = await sql`SELECT code, name, family, clb_needed, exam_weight, mastery_pct, confidence, status, last_evidence::date AS last_evidence, priority::numeric(6,2) AS priority FROM v_grammar_weakest LIMIT 44`;
   const fsrs = await one`SELECT * FROM v_fsrs_load`;
   const resources = await sql`SELECT id, title, kind, environments, skills, clb_min, clb_max, minutes_per_unit, priority, cadence_rule FROM resources WHERE active`;

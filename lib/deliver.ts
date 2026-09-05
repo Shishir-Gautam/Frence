@@ -79,7 +79,7 @@ export async function sendCheckin(chatId: number, date: string) {
 
 export function label(i: PlanItem): string {
   switch (i.type) {
-    case "unit": return `${i.resource_id} unit #${i.unit_id}${i.mode && i.mode !== "study" ? ` (${i.mode})` : ""}`;
+    case "unit": return `${i.resource_id === "assimil" ? "Assimil" : i.resource_id === "coach_lessons" ? "Lesson" : i.resource_id}${i.title ? ` — ${i.title}` : ` #${i.unit_id}`}${i.mode && i.mode !== "study" ? ` (${i.mode})` : ""}`;
     case "drill": return `Drill (${i.method.replace("_", " ")}): ${i.competency_codes.map(competencyName).join(", ")}`;
     case "grammar_brief": return `Grammar: ${competencyName(i.competency_code)}`;
     case "listening_set": return "TCF listening set";

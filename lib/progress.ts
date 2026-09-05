@@ -25,7 +25,7 @@ export async function sendProgress(chatId: number) {
   const fam = grid.by_family.map((f: any) => `${f.family} ${f.mastery}% (${f.solid}/${f.n})`).join(" · ");
   const weakest = grid.weakest.map((x: any) => `${esc(x.name)} ${Math.round(x.mastery_pct)}%`).join("\n   ");
   await sendMessage(chatId,
-    `📈 <b>Progress → CLB ${learner.target_clb}</b> (day ${days}, target now ${expectedClb(days)})\n<pre>${esc(lines)}</pre>` +
+    `📈 <b>Progress → CLB ${learner.target_clb}</b> (day ${days}, target now ${expectedClb(days)})${learner.placement_done ? "" : "\n⚠️ Run /placement first — estimates are placeholders."}\n<pre>${esc(lines)}</pre>` +
     `⏱ ${Math.round((t?.verified ?? 0) / 60)} h verified / ${Math.round((t?.total ?? 0) / 60)} h logged · ${w?.v ?? 0} verified min last 7d · 🔥 ${streak}d\n` +
     `🃏 ${srs.total} cards · ${srs.due_now} due · retention ${(Number(srs.retention_14d) * 100).toFixed(0)}% (${srs.reviews_14d} reviews)\n` +
     `📚 ${units.map((u) => `${u.resource_id}: ${u.passed} passed${u.retest ? `, ${u.retest} to retest` : ""}`).join(" · ") || "no units yet"}\n\n` +

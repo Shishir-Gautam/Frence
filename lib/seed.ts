@@ -45,7 +45,7 @@ export async function seedAll() {
   const resources = await seedToolbox();
   const grid = await seedGrid();
   const start = process.env.STUDY_START_DATE, exam = process.env.TARGET_EXAM_DATE, tz = process.env.LEARNER_TZ;
-  if (start) await sql`UPDATE learner SET start_date = ${start} WHERE id = 1 AND start_date = CURRENT_DATE`;
+  if (start) await sql`UPDATE learner SET start_date = LEAST(${start}::date, CURRENT_DATE) WHERE id = 1`;
   if (exam) await sql`UPDATE learner SET exam_date = COALESCE(exam_date, ${exam}) WHERE id = 1`;
   if (tz) await sql`UPDATE learner SET tz = ${tz} WHERE id = 1`;
   return { resources, grid };

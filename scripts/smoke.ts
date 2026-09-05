@@ -102,7 +102,7 @@ for (const t of ["review_log", "cards", "unit_checks", "drill_sessions", "drills
 await sql`UPDATE grammar_mastery SET mastery_pct = 0, confidence = 0, evidence_count = 0, status = 'untouched', last_evidence = NULL`;
 
 const seeded = await seedAll();
-assert(seeded.grid === 44 && seeded.resources === 9, `schema applied, seeded ${seeded.grid} competencies / ${seeded.resources} resources`);
+assert(seeded.grid === 44 && seeded.resources === 10, `schema applied, seeded ${seeded.grid} competencies / ${seeded.resources} resources`);
 await sql`UPDATE learner SET chat_id = ${CHAT}, placement_done = FALSE WHERE id = 1`;
 
 // two fake Assimil lessons

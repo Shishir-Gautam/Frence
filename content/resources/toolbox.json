@@ -24,6 +24,31 @@
     "how_to_use": "Unit payload = {dialogue:[{fr,en}], notes, exercises}. Renderer sends text + slow and normal TTS voice notes. Gate check: back-translation of 3 lines + 1 dictation, 80% to pass."
   },
   {
+    "id": "coach_lessons",
+    "title": "Coach lessons — bot-authored beginner audio lessons (survival ladder)",
+    "kind": "course",
+    "environments": [
+      "patrol",
+      "driving"
+    ],
+    "skills": [
+      "listening",
+      "reading",
+      "speaking"
+    ],
+    "clb_min": 1,
+    "clb_max": 3,
+    "modality": [
+      "audio",
+      "text"
+    ],
+    "minutes_per_unit": 20,
+    "priority": 1,
+    "cadence_rule": "Absolute-beginner input for patrol: one lesson per day, in order, until listening CLB ≥ 3 or Assimil is loaded (then Assimil takes over and these become optional). Same format as Assimil: 8-10 line dialogue with EN, notes, slow + natural audio, gate check.",
+    "url": null,
+    "how_to_use": "Units are generated on demand by the EXAMINER along a fixed survival ladder (greetings → numbers/time → work & routine → asking questions → shopping → family → city/transport → past events…), each tied to 1-2 grammar codes. Gate check: back-translation + dictation, 80%."
+  },
+  {
     "id": "innerfrench",
     "title": "InnerFrench podcast (Hugo Cotton)",
     "kind": "podcast",
