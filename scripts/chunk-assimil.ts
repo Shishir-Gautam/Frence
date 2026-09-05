@@ -12,7 +12,7 @@ if (!pdfPath) { console.error("usage: chunk-assimil.ts <pdf> [from] [to]"); proc
 const FROM = Number(fromArg ?? 1), TO = Number(toArg ?? 113), BATCH = 5;
 const OUT = "content/assimil/lessons.json";
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = (process.env.GEMINI_MODEL || "gemini-3.8-flash").split(",")[0].trim();
 
 type Lesson = { n: number; title: string; dialogue: { fr: string; en: string }[]; notes: string; exercises: { fr: string; en: string }[] };
 

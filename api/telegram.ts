@@ -13,7 +13,7 @@ import { buildPlan } from "../lib/planner.js";
 import { sendMorningCard, sendSlot } from "../lib/deliver.js";
 import { sendProgress } from "../lib/progress.js";
 import { teachable } from "../lib/grammar.js";
-import { tutor, ask, COMPETENCIES } from "../lib/coach.js";
+import { tutor, ask, COMPETENCIES, pingModels } from "../lib/coach.js";
 import { localDate } from "../lib/time.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -77,7 +77,7 @@ async function onCommand(chatId: number, text: string) {
     case "/start":
       return sendMessage(chatId, `👋 Salut ! I'm your TCF Canada coach. Chat id <code>${chatId}</code>.\n${l.placement_done ? "/today for the plan." : "Start with /placement (12 items, ~10 min) so the planner knows your level."}`);
     case "/help":
-      return sendMessage(chatId, "/today /replan /progress /placement\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/codes (grammar codes) · /exam YYYY-MM-DD · /log 25 min podcast · /skip\nAny voice note = speaking feedback; any French text = writing feedback; English question = tutor.");
+      return sendMessage(chatId, "/today /replan /progress /placement /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/codes (grammar codes) · /exam YYYY-MM-DD · /log 25 min podcast · /skip\nAny voice note = speaking feedback; any French text = writing feedback; English question = tutor.");
     case "/placement": {
       await sendMessage(chatId, "Building your placement test…");
       const items = await checks.authorPlacement();
@@ -111,6 +111,7 @@ async function onCommand(chatId: number, text: string) {
       const codes = code && COMPETENCIES.some((x) => x.code === code) ? code : (await teachable(1))[0]?.code;
       return codes ? sendGrammarBrief(chatId, codes) : sendMessage(chatId, "Nothing teachable yet.");
     }
+    case "/ping": { await sendMessage(chatId, "Pinging models…"); return sendMessage(chatId, esc((await pingModels()).join("\n"))); }
     case "/codes": return sendMessage(chatId, COMPETENCIES.map((x) => `<code>${x.code}</code> ${esc(x.name)}`).join("\n"));
     case "/listen": return sendListeningSet(chatId, "patrol");
     case "/read": return sendReadingSet(chatId, "seated");

@@ -105,6 +105,7 @@ export function setCommands() {
       { command: "progress", description: "Progress vs CLB 7" },
       { command: "log", description: "Log minutes: /log 25 patrol" },
       { command: "replan", description: "Regenerate today's plan" },
+      { command: "ping", description: "Check which Gemini models respond" },
       { command: "help", description: "What can I do" },
     ],
   });

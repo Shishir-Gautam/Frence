@@ -82,4 +82,3 @@ Any time: `/drill CODE [pimsleur|michel_thomas|language_transfer]`, `/grammar CO
 ## Cost
 
 Per day ≈ 1 planner call (~15–25k tokens in), 4–8 EXAMINER/GRADER calls, 1 DRILL AUTHOR call, and TTS for new segments only (drill prompts/answers and lesson audio are cached by hash / Telegram file_id). Comfortably inside Gemini's free tier for one learner.
-# Frence

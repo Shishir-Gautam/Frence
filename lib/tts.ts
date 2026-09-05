@@ -101,7 +101,7 @@ export async function renderDrill(script: DrillStep[], pauseDefault = 4, concurr
   return { mp3: concat(parts), seconds: Math.round(ms / 1000) };
 }
 
-async function withRetry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, tries = 2): Promise<T> {
   let err: any;
   for (let i = 0; i < tries; i++) {
     try { return await fn(); } catch (e: any) {
