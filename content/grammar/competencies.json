@@ -1,0 +1,500 @@
+[
+ {
+  "code": "TNS_PRESENT_REG",
+  "family": "tenses",
+  "name": "Présent — verbes réguliers (-er/-ir/-re)",
+  "clb_needed": 3,
+  "exam_weight": 5,
+  "prerequisites": [],
+  "description": "Conjugates regular verbs in all persons. Je parle / nous finissons / ils attendent."
+ },
+ {
+  "code": "TNS_PRESENT_IRREG",
+  "family": "tenses",
+  "name": "Présent — verbes irréguliers clés",
+  "clb_needed": 3,
+  "exam_weight": 5,
+  "prerequisites": [
+   "TNS_PRESENT_REG"
+  ],
+  "description": "être, avoir, aller, faire, pouvoir, vouloir, devoir, savoir, prendre, venir, dire, voir, mettre. Nous devons partir / ils font."
+ },
+ {
+  "code": "TNS_PRONOMINAL",
+  "family": "tenses",
+  "name": "Verbes pronominaux",
+  "clb_needed": 4,
+  "exam_weight": 3,
+  "prerequisites": [
+   "TNS_PRESENT_IRREG",
+   "PRO_SUJET_TONIQUE"
+  ],
+  "description": "se lever, s'appeler, se souvenir de; pronoun agrees with subject; negation ne me lève pas. Je me suis levé tôt."
+ },
+ {
+  "code": "TNS_FUTUR_PROCHE",
+  "family": "tenses",
+  "name": "Futur proche (aller + infinitif)",
+  "clb_needed": 4,
+  "exam_weight": 3,
+  "prerequisites": [
+   "TNS_PRESENT_IRREG"
+  ],
+  "description": "Plans and intentions. Je vais déménager en mai. On va voir."
+ },
+ {
+  "code": "TNS_PASSE_COMP",
+  "family": "tenses",
+  "name": "Passé composé — auxiliaire et participes",
+  "clb_needed": 4,
+  "exam_weight": 5,
+  "prerequisites": [
+   "TNS_PRESENT_IRREG"
+  ],
+  "description": "Choice of avoir/être (DR & MRS VANDERTRAMP), irregular participles (pris, fait, vu, dû, eu, été). J'ai pris le métro, elle est arrivée."
+ },
+ {
+  "code": "TNS_IMPARFAIT",
+  "family": "tenses",
+  "name": "Imparfait — formation et emplois",
+  "clb_needed": 5,
+  "exam_weight": 4,
+  "prerequisites": [
+   "TNS_PRESENT_REG"
+  ],
+  "description": "Stem from nous-form; description, habit, background. Quand j'étais petit, on habitait à Katmandou."
+ },
+ {
+  "code": "TNS_PC_VS_IMP",
+  "family": "tenses",
+  "name": "Passé composé vs imparfait dans le récit",
+  "clb_needed": 6,
+  "exam_weight": 5,
+  "prerequisites": [
+   "TNS_PASSE_COMP",
+   "TNS_IMPARFAIT"
+  ],
+  "description": "Foreground events vs background/ongoing states in the same narrative. Il pleuvait quand je suis sorti. Core of writing task 2."
+ },
+ {
+  "code": "TNS_FUTUR_SIMPLE",
+  "family": "tenses",
+  "name": "Futur simple",
+  "clb_needed": 5,
+  "exam_weight": 4,
+  "prerequisites": [
+   "TNS_PRESENT_IRREG"
+  ],
+  "description": "Regular stems + irregular (serai, aurai, irai, ferai, pourrai, devrai, viendrai). Quand j'aurai le temps, je t'appellerai."
+ },
+ {
+  "code": "TNS_INDICATEURS_TEMPS",
+  "family": "tenses",
+  "name": "Indicateurs temporels (depuis, pendant, il y a, dans, en)",
+  "clb_needed": 5,
+  "exam_weight": 3,
+  "prerequisites": [
+   "TNS_PASSE_COMP"
+  ],
+  "description": "Time expressions and the tense they force. CRITICAL RULE — depuis + PRÉSENT for an action that started in the past and continues: « J'habite ici depuis un an » (NOT « j'ai habité ici depuis un an », English 'I have lived' interference); also « ça fait un an que j'habite ici », « il y a un an que… ». Contrast: pendant + passé composé for a finished duration (« j'ai vécu là pendant deux ans »), il y a + passé composé for a point in the past (« je suis arrivé il y a deux ans »), dans + futur (« je pars dans un mois »), en for duration needed (« en deux heures »). Examiner: always include at least one depuis-present item and one pendant/il y a distractor; flag any past tense after depuis as an error tagged to this code.",
+  "test_focus": [
+   "depuis + présent (never passé composé)",
+   "depuis vs pendant vs il y a",
+   "ça fait … que / il y a … que + présent"
+  ]
+ },
+ {
+  "code": "TNS_PLUS_QUE_PARFAIT",
+  "family": "tenses",
+  "name": "Plus-que-parfait",
+  "clb_needed": 7,
+  "exam_weight": 2,
+  "prerequisites": [
+   "TNS_PC_VS_IMP"
+  ],
+  "description": "Anteriority in a past narrative. Il avait déjà fini quand je suis arrivé."
+ },
+ {
+  "code": "MOOD_IMPERATIF",
+  "family": "moods",
+  "name": "Impératif",
+  "clb_needed": 4,
+  "exam_weight": 2,
+  "prerequisites": [
+   "TNS_PRESENT_IRREG"
+  ],
+  "description": "Forms incl. pronoun attachment (lève-toi, dis-le-moi) and negative (ne le fais pas). Invitations and instructions in writing task 1."
+ },
+ {
+  "code": "MOOD_COND_PRES",
+  "family": "moods",
+  "name": "Conditionnel présent — politesse et hypothèse",
+  "clb_needed": 5,
+  "exam_weight": 4,
+  "prerequisites": [
+   "TNS_FUTUR_SIMPLE"
+  ],
+  "description": "Je voudrais, pourriez-vous, il faudrait, on devrait; softened opinions. Essential register tool for speaking task 2."
+ },
+ {
+  "code": "MOOD_SI_HYPOTHESE",
+  "family": "moods",
+  "name": "Hypothèse avec si",
+  "clb_needed": 6,
+  "exam_weight": 4,
+  "prerequisites": [
+   "MOOD_COND_PRES",
+   "TNS_IMPARFAIT"
+  ],
+  "description": "Si + présent → futur/présent; si + imparfait → conditionnel. Si la ville investissait dans les transports, il y aurait moins de voitures."
+ },
+ {
+  "code": "MOOD_SUBJ_PRES",
+  "family": "moods",
+  "name": "Subjonctif présent — formation et déclencheurs",
+  "clb_needed": 7,
+  "exam_weight": 5,
+  "prerequisites": [
+   "TNS_PRESENT_IRREG"
+  ],
+  "description": "Ils-stem + endings; irregulars (soit, ait, aille, fasse, puisse, sache); after il faut que, vouloir que, pour que, bien que, avant que. Il faut que le gouvernement agisse."
+ },
+ {
+  "code": "MOOD_SUBJ_VS_IND",
+  "family": "moods",
+  "name": "Subjonctif vs indicatif après les verbes d'opinion",
+  "clb_needed": 7,
+  "exam_weight": 4,
+  "prerequisites": [
+   "MOOD_SUBJ_PRES"
+  ],
+  "description": "Je pense que c'est vrai / je ne pense pas que ce soit vrai; il est certain que (ind) vs il est possible que (subj). Marks CLB 7 in task 3."
+ },
+ {
+  "code": "PRO_SUJET_TONIQUE",
+  "family": "pronouns",
+  "name": "Pronoms sujets, on, pronoms toniques",
+  "clb_needed": 3,
+  "exam_weight": 2,
+  "prerequisites": [],
+  "description": "je/tu/il…, on = nous in speech, moi/toi/lui/eux after prepositions and for emphasis. Moi, je pense que…"
+ },
+ {
+  "code": "PRO_COD_COI",
+  "family": "pronouns",
+  "name": "Pronoms COD / COI et leur place",
+  "clb_needed": 5,
+  "exam_weight": 4,
+  "prerequisites": [
+   "TNS_PRESENT_IRREG",
+   "TNS_PASSE_COMP"
+  ],
+  "description": "le/la/les vs lui/leur; before the verb, before the auxiliary, after the infinitive. Je lui ai téléphoné. Je vais les voir."
+ },
+ {
+  "code": "PRO_Y_EN",
+  "family": "pronouns",
+  "name": "Pronoms y et en",
+  "clb_needed": 6,
+  "exam_weight": 4,
+  "prerequisites": [
+   "PRO_COD_COI",
+   "DET_PARTITIF_QUANTITE"
+  ],
+  "description": "y = à + thing / place; en = de + thing / quantity. J'en ai deux. J'y pense. Includes double-pronoun order (le lui, m'en) as a stretch."
+ },
+ {
+  "code": "PRO_RELATIFS_SIMPLES",
+  "family": "pronouns",
+  "name": "Pronoms relatifs qui / que / où",
+  "clb_needed": 5,
+  "exam_weight": 5,
+  "prerequisites": [
+   "TNS_PRESENT_IRREG"
+  ],
+  "description": "Subject vs object relative, où for place/time. La ville où j'habite est chère. Le film que j'ai vu."
+ },
+ {
+  "code": "PRO_RELATIFS_AVANCES",
+  "family": "pronouns",
+  "name": "dont, ce qui / ce que, lequel",
+  "clb_needed": 7,
+  "exam_weight": 4,
+  "prerequisites": [
+   "PRO_RELATIFS_SIMPLES",
+   "SYN_VERBE_PREP_INF"
+  ],
+  "description": "dont for de-complements, ce qui/ce que for clauses, lequel after prepositions. Ce qui me dérange, c'est le bruit. Le sujet dont on parle."
+ },
+ {
+  "code": "AGR_ADJ_GENRE_NOMBRE",
+  "family": "agreement",
+  "name": "Accord et place des adjectifs",
+  "clb_needed": 3,
+  "exam_weight": 4,
+  "prerequisites": [
+   "DET_ARTICLES"
+  ],
+  "description": "Feminine/plural forms (-eux/-euse, -if/-ive, beau/belle/beaux), BAGS adjectives before the noun. Une grande maison blanche."
+ },
+ {
+  "code": "AGR_SUJET_VERBE",
+  "family": "agreement",
+  "name": "Accord sujet–verbe",
+  "clb_needed": 4,
+  "exam_weight": 3,
+  "prerequisites": [
+   "TNS_PRESENT_REG"
+  ],
+  "description": "Including on, tout le monde, la plupart des gens, beaucoup de + plural. Tout le monde pense que… La plupart des gens travaillent."
+ },
+ {
+  "code": "AGR_PP_ETRE",
+  "family": "agreement",
+  "name": "Accord du participe passé avec être et pronominaux",
+  "clb_needed": 5,
+  "exam_weight": 3,
+  "prerequisites": [
+   "TNS_PASSE_COMP"
+  ],
+  "description": "Elle est partie, ils se sont rencontrés, elle s'est lavé les mains (no agreement with following COD)."
+ },
+ {
+  "code": "AGR_PP_AVOIR_COD",
+  "family": "agreement",
+  "name": "Accord du participe passé avec COD antéposé",
+  "clb_needed": 7,
+  "exam_weight": 3,
+  "prerequisites": [
+   "AGR_PP_ETRE",
+   "PRO_COD_COI",
+   "PRO_RELATIFS_SIMPLES"
+  ],
+  "description": "La lettre que j'ai écrite. Je les ai vues. Common CLB 7 writing discriminator."
+ },
+ {
+  "code": "SYN_PREPOSITIONS_LIEU_TEMPS",
+  "family": "syntax",
+  "name": "Prépositions de lieu et de temps",
+  "clb_needed": 4,
+  "exam_weight": 3,
+  "prerequisites": [
+   "DET_ARTICLES"
+  ],
+  "description": "à/en/au/aux with cities and countries, chez, dans/sur/sous, à 8 h, le lundi, en 2020, au printemps. Je vis au Canada, à Toronto."
+ },
+ {
+  "code": "SYN_VERBE_PREP_INF",
+  "family": "syntax",
+  "name": "Verbe + à / de + infinitif",
+  "clb_needed": 5,
+  "exam_weight": 3,
+  "prerequisites": [
+   "TNS_PRESENT_IRREG"
+  ],
+  "description": "commencer à, décider de, essayer de, réussir à, avoir besoin de, permettre de; adjectives + de (content de). J'ai décidé de partir."
+ },
+ {
+  "code": "SYN_COMPARATIF_SUPERLATIF",
+  "family": "syntax",
+  "name": "Comparatif et superlatif",
+  "clb_needed": 5,
+  "exam_weight": 3,
+  "prerequisites": [
+   "AGR_ADJ_GENRE_NOMBRE"
+  ],
+  "description": "plus/moins/aussi … que, autant de, meilleur/mieux, le plus … de. Les transports sont moins chers qu'en voiture."
+ },
+ {
+  "code": "SYN_DISCOURS_INDIRECT",
+  "family": "syntax",
+  "name": "Discours indirect et concordance des temps",
+  "clb_needed": 7,
+  "exam_weight": 3,
+  "prerequisites": [
+   "TNS_IMPARFAIT",
+   "MOOD_COND_PRES",
+   "INT_INDIRECTE"
+  ],
+  "description": "Il a dit qu'il viendrait / qu'il était fatigué; demander si, de + inf. Used when reporting the two viewpoints in writing task 3."
+ },
+ {
+  "code": "SYN_PASSIF_ON",
+  "family": "syntax",
+  "name": "Voix passive et on impersonnel",
+  "clb_needed": 7,
+  "exam_weight": 2,
+  "prerequisites": [
+   "TNS_PASSE_COMP",
+   "AGR_PP_ETRE"
+  ],
+  "description": "Le projet a été approuvé par la ville / On a approuvé le projet. Formal register in articles (task 2)."
+ },
+ {
+  "code": "CON_BASE",
+  "family": "connectors",
+  "name": "Connecteurs de base",
+  "clb_needed": 4,
+  "exam_weight": 3,
+  "prerequisites": [],
+  "description": "et, mais, ou, parce que, donc, alors, puis, aussi. Sentence-level linking."
+ },
+ {
+  "code": "CON_ORGANISATION",
+  "family": "connectors",
+  "name": "Articulateurs d'organisation du discours",
+  "clb_needed": 5,
+  "exam_weight": 4,
+  "prerequisites": [
+   "CON_BASE"
+  ],
+  "description": "d'abord, ensuite, enfin, en premier lieu, par ailleurs, en conclusion. Paragraph skeleton for tasks W2/W3/S3."
+ },
+ {
+  "code": "CON_CAUSE_CONSEQUENCE",
+  "family": "connectors",
+  "name": "Cause et conséquence",
+  "clb_needed": 6,
+  "exam_weight": 5,
+  "prerequisites": [
+   "CON_BASE"
+  ],
+  "description": "car, puisque, comme, grâce à, à cause de, c'est pourquoi, par conséquent, du coup (oral), si bien que. Grâce au télétravail, les gens perdent moins de temps."
+ },
+ {
+  "code": "CON_OPPOSITION_CONCESSION",
+  "family": "connectors",
+  "name": "Opposition et concession",
+  "clb_needed": 7,
+  "exam_weight": 5,
+  "prerequisites": [
+   "CON_CAUSE_CONSEQUENCE",
+   "MOOD_SUBJ_PRES"
+  ],
+  "description": "cependant, pourtant, en revanche, alors que, malgré, même si (ind), bien que (subj), certes… mais. The single most-rewarded structure in task W3/S3 argumentation."
+ },
+ {
+  "code": "CON_BUT_CONDITION",
+  "family": "connectors",
+  "name": "But et condition",
+  "clb_needed": 7,
+  "exam_weight": 3,
+  "prerequisites": [
+   "MOOD_SUBJ_PRES",
+   "MOOD_SI_HYPOTHESE"
+  ],
+  "description": "pour que / afin que (subj), afin de / pour + inf, à condition que, sauf si, en cas de. Pour que cela fonctionne, il faudrait…"
+ },
+ {
+  "code": "CON_OPINION",
+  "family": "connectors",
+  "name": "Expression de l'opinion et de la nuance",
+  "clb_needed": 6,
+  "exam_weight": 5,
+  "prerequisites": [
+   "CON_BASE",
+   "MOOD_COND_PRES"
+  ],
+  "description": "à mon avis, selon moi, je suis convaincu que, il me semble que, d'une part… d'autre part, en ce qui concerne, personnellement. Task S3/W3 opener bank."
+ },
+ {
+  "code": "INT_TROIS_FORMES",
+  "family": "interrogation",
+  "name": "Les trois formes de la question",
+  "clb_needed": 4,
+  "exam_weight": 5,
+  "prerequisites": [
+   "TNS_PRESENT_IRREG"
+  ],
+  "description": "Intonation, est-ce que, inversion (incl. -t- and pronoun inversion with passé composé: avez-vous pris ?). Speaking task 2 is graded on this."
+ },
+ {
+  "code": "INT_MOTS_INTERROGATIFS",
+  "family": "interrogation",
+  "name": "Mots interrogatifs",
+  "clb_needed": 4,
+  "exam_weight": 5,
+  "prerequisites": [
+   "INT_TROIS_FORMES"
+  ],
+  "description": "quel/quelle/quels, combien (de), où, quand, pourquoi, comment, lequel, à quelle heure, qu'est-ce que / qu'est-ce qui. Quels sont les horaires ? Combien ça coûte ?"
+ },
+ {
+  "code": "INT_INDIRECTE",
+  "family": "interrogation",
+  "name": "Question indirecte et demande polie",
+  "clb_needed": 6,
+  "exam_weight": 4,
+  "prerequisites": [
+   "INT_MOTS_INTERROGATIFS",
+   "MOOD_COND_PRES"
+  ],
+  "description": "Je voudrais savoir si…, pourriez-vous me dire où…, j'aimerais savoir combien…, est-il possible de… Register upgrade for speaking task 2."
+ },
+ {
+  "code": "NEG_BASE",
+  "family": "negation",
+  "name": "Négation ne … pas et sa place",
+  "clb_needed": 3,
+  "exam_weight": 4,
+  "prerequisites": [
+   "TNS_PRESENT_REG"
+  ],
+  "description": "Around the verb, around the auxiliary (je n'ai pas compris), before an infinitive (ne pas fumer), de after negation (je n'ai pas de voiture)."
+ },
+ {
+  "code": "NEG_AVANCEE",
+  "family": "negation",
+  "name": "Négations avancées et restriction",
+  "clb_needed": 5,
+  "exam_weight": 3,
+  "prerequisites": [
+   "NEG_BASE",
+   "DET_PARTITIF_QUANTITE"
+  ],
+  "description": "ne … jamais / rien / personne / plus / aucun / ni … ni, ne … que (restriction), personne ne / rien ne as subject. Je ne sors plus que le week-end."
+ },
+ {
+  "code": "DET_ARTICLES",
+  "family": "determiners",
+  "name": "Articles définis, indéfinis et contractés",
+  "clb_needed": 3,
+  "exam_weight": 4,
+  "prerequisites": [],
+  "description": "le/la/l'/les, un/une/des, au/aux/du/des; gender of frequent nouns; article omission with professions (je suis gardien)."
+ },
+ {
+  "code": "DET_POSSESSIFS_DEMONSTRATIFS",
+  "family": "determiners",
+  "name": "Possessifs et démonstratifs",
+  "clb_needed": 3,
+  "exam_weight": 3,
+  "prerequisites": [
+   "DET_ARTICLES"
+  ],
+  "description": "mon/ma/mes (mon amie), notre/nos, ce/cet/cette/ces, celui-ci / celle-là as a stretch. Cette idée est meilleure que celle-là."
+ },
+ {
+  "code": "DET_PARTITIF_QUANTITE",
+  "family": "determiners",
+  "name": "Partitifs et expressions de quantité",
+  "clb_needed": 4,
+  "exam_weight": 4,
+  "prerequisites": [
+   "DET_ARTICLES",
+   "NEG_BASE"
+  ],
+  "description": "du/de la/de l'/des, de after negation and quantity (beaucoup de, trop de, un peu de, assez de), pas de. Il y a trop de voitures et pas assez de pistes cyclables."
+ },
+ {
+  "code": "DET_INDEFINIS",
+  "family": "determiners",
+  "name": "Indéfinis (tout, chaque, quelques, plusieurs, certains)",
+  "clb_needed": 6,
+  "exam_weight": 2,
+  "prerequisites": [
+   "AGR_ADJ_GENRE_NOMBRE"
+  ],
+  "description": "tout/toute/tous/toutes agreement and pronunciation, chaque, quelques, plusieurs, certains, la plupart. Certains pensent que… Tous les jours."
+ }
+]

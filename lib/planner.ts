@@ -1,0 +1,125 @@
+// Nightly planner: snapshot (grid, FSRS load, resources, history) -> PLANNER role -> plan -> timed deliveries per environment.
+import { sql, one, json, getLearner, plannerSnapshot } from "./db.js";
+import { ask } from "./coach.js";
+import { teachable, decayAll } from "./grammar.js";
+import { nextUnit } from "./units.js";
+import { localToUtc, localDate, localWeekday } from "./time.js";
+import { updateReceptiveEstimates } from "./grade.js";
+
+export type PlanItem =
+  | { type: "unit"; resource_id: string; unit_id: number; mode?: "study" | "replay" | "active" }
+  | { type: "drill"; method: "pimsleur" | "michel_thomas" | "language_transfer"; competency_codes: string[]; minutes?: number }
+  | { type: "grammar_brief"; competency_code: string }
+  | { type: "listening_set" } | { type: "reading_set" }
+  | { type: "writing"; task: "micro" | "tcf_w1" | "tcf_w2" | "tcf_w3" }
+  | { type: "speaking"; task: "micro" | "tcf_s1" | "tcf_s2" | "tcf_s3" }
+  | { type: "interview"; task: "tcf_s1" | "tcf_s3" }
+  | { type: "srs"; count: number }
+  | { type: "surprise_test" };
+
+export type Plan = {
+  focus: string; rationale: string; message_to_learner: string;
+  slots: { environment: "patrol" | "driving" | "seated" | "micro"; slot: string; time?: string; minutes: number; items: PlanItem[] }[];
+};
+
+const CONTRACT = `Return JSON:
+{"focus": one line, "rationale": 3-5 lines citing the metrics you used, "message_to_learner": 2-3 sentences (English, concrete metric, what today attacks),
+ "slots":[
+  {"environment":"patrol","slot":"patrol","minutes":30,"items":[...]},         // walking: unit (study) from assimil/rfi_jff/innerfrench/francais_authentique, listening_set
+  {"environment":"micro","slot":"srs","minutes":8,"items":[{"type":"srs","count":15}]},   // ONE entry; repeated at each srs time
+  {"environment":"driving","slot":"driving","minutes":25,"items":[...]},       // drill (required daily) + optional unit replay (assimil, mode "replay") or podcast unit
+  {"environment":"seated","slot":"seated","minutes":45,"items":[...]}          // grammar_brief (max 2), writing, speaking or interview, reading_set, assimil unit mode "active"
+ ]}
+Item types: {"type":"unit","resource_id","unit_id","mode":"study|replay|active"} — unit_id MUST come from NEXT UNITS; {"type":"drill","method":"pimsleur|michel_thomas|language_transfer","competency_codes":[1-2 codes],"minutes":15-25}; {"type":"grammar_brief","competency_code"} — codes MUST come from TEACHABLE; {"type":"listening_set"}; {"type":"reading_set"}; {"type":"writing","task":"micro|tcf_w1|tcf_w2|tcf_w3"}; {"type":"speaking","task":"micro|tcf_s1|tcf_s2|tcf_s3"}; {"type":"interview","task":"tcf_s1|tcf_s3"}; {"type":"surprise_test"} (Sundays only).
+Rules: total 120-180 min. Daily: one drill, one graded production item (writing/speaking/interview), the next assimil unit on patrol until Assimil is finished (status of last unit tells you). tcf_* tasks only when that skill's CLB ≥ 4, else micro. Podcasts only inside their CLB band and cadence. Grammar: at most 2 competencies/day, from TEACHABLE, and the same codes should drive the drill. If fsrs_load.due_now > 40: add a second micro srs entry and say so. Sunday: lighter, plus surprise_test in seated. A unit with status 'attempted' must be retested (mode study) before a new one.`;
+
+export async function buildPlan(forDate?: string): Promise<{ date: string; plan: Plan }> {
+  const learner = await getLearner();
+  const date = forDate ?? localDate(learner.tz, 1);
+  await decayAll();
+  await updateReceptiveEstimates();
+  const snap = await plannerSnapshot();
+  // make sure each active feed/course has a concrete next unit the planner can reference
+  const next: any[] = [];
+  for (const r of snap.resources.filter((r: any) => ["course", "podcast", "news"].includes(r.kind))) {
+    try { const u = await nextUnit(r.id); if (u) next.push({ resource_id: r.id, unit_id: Number(u.id), seq: u.seq, title: u.title, status: u.status, attempts: u.attempts, clb_level: u.clb_level }); } catch (e) { console.error("nextUnit", r.id, e); }
+  }
+  const teach = await teachable(6);
+  const weekday = localWeekday(learner.tz, date);
+  const daysLeft = learner.exam_date ? Math.round((new Date(learner.exam_date).getTime() - Date.now()) / 86400000) : null;
+
+  const user = `PLAN ${weekday} ${date}. Day ${snap.days_since_start} of the programme${daysLeft ? `, ${daysLeft} days to the exam` : ", exam not booked"}.
+Straight-line target CLB today: ${Math.min(7, (7 * Math.min(1, snap.days_since_start / 240))).toFixed(1)}.
+
+LEARNER STATE:
+${JSON.stringify({ current_clb: snap.current_clb, placement_done: snap.placement_done, minutes_last7: snap.minutes_last7, minutes_14d_by_environment: snap.minutes_14d_by_environment, schedule: snap.schedule, settings: snap.settings })}
+
+GRAMMAR GRID (weakest first, with priority):
+${JSON.stringify(snap.grammar_grid_weakest_first)}
+TEACHABLE NOW (prerequisites met):
+${JSON.stringify(teach)}
+
+FSRS LOAD: ${JSON.stringify(snap.fsrs_load)}
+
+RESOURCE LIBRARY:
+${JSON.stringify(snap.resources)}
+NEXT UNITS (the only unit_ids you may schedule):
+${JSON.stringify(next)}
+UNIT STATS: ${JSON.stringify(snap.unit_stats)}
+
+RECENT HISTORY:
+submissions: ${JSON.stringify(snap.recent_submissions)}
+unit checks: ${JSON.stringify(snap.recent_unit_checks)}
+drills: ${JSON.stringify(snap.recent_drills)}
+quiz accuracy by CLB: ${JSON.stringify(snap.quiz_accuracy_by_clb)}
+error patterns: ${JSON.stringify(snap.error_patterns)}
+last plans: ${JSON.stringify(snap.last_plans)}
+delivery outcomes (7d): ${JSON.stringify(snap.delivery_outcomes_7d)}
+
+${CONTRACT}`;
+
+  const plan = await ask<Plan>("PLANNER", user, { temperature: 0.35 });
+  validate(plan, next, teach);
+  await sql`INSERT INTO plans (plan_date, plan, inputs_digest) VALUES (${date}, ${json(plan)}::jsonb, ${json({ clb: snap.current_clb, fsrs: snap.fsrs_load, teach: teach.map((t: any) => t.code), next })}::jsonb)
+            ON CONFLICT (plan_date) DO UPDATE SET plan = EXCLUDED.plan, inputs_digest = EXCLUDED.inputs_digest, created_at = now()`;
+  await materialise(date, plan);
+  return { date, plan };
+}
+
+function validate(plan: Plan, next: any[], teach: any[]) {
+  const unitIds = new Set(next.map((n) => n.unit_id));
+  const codes = new Set(teach.map((t: any) => t.code));
+  for (const s of plan.slots ?? []) {
+    s.items = (s.items ?? []).filter((it) => {
+      if (it.type === "unit") return unitIds.has(it.unit_id);
+      if (it.type === "grammar_brief") return codes.has(it.competency_code);
+      return true;
+    });
+  }
+  if (!plan.slots?.length) throw new Error("planner returned no slots");
+}
+
+/** Plan -> deliveries (replaces pending ones for that date). */
+export async function materialise(date: string, plan: Plan) {
+  const learner = await getLearner();
+  const s = learner.schedule;
+  await sql`DELETE FROM deliveries WHERE plan_date = ${date} AND status = 'pending'`;
+  const rows: { environment: string; slot: string; at: Date; payload: any }[] = [];
+  const at = (hhmm: string) => localToUtc(date, hhmm, learner.tz);
+  rows.push({ environment: "micro", slot: "morning_card", at: at(s.morning_card), payload: { plan } });
+  const patrolTimes: string[] = Array.isArray(s.patrol) ? s.patrol : [s.patrol];
+  let patrolIdx = 0;
+  for (const sl of plan.slots) {
+    if (sl.slot === "srs" || sl.environment === "micro") {
+      for (const t of s.srs as string[]) rows.push({ environment: "micro", slot: "srs", at: at(t), payload: { items: sl.items, minutes: sl.minutes } });
+    } else if (sl.environment === "patrol") {
+      rows.push({ environment: "patrol", slot: "patrol", at: at(sl.time ?? patrolTimes[Math.min(patrolIdx++, patrolTimes.length - 1)]), payload: { items: sl.items, minutes: sl.minutes } });
+    } else if (s[sl.environment]) {
+      rows.push({ environment: sl.environment, slot: sl.slot, at: at(sl.time ?? s[sl.environment]), payload: { items: sl.items, minutes: sl.minutes } });
+    }
+  }
+  rows.push({ environment: "micro", slot: "checkin", at: at(s.checkin), payload: {} });
+  for (const r of rows)
+    await sql`INSERT INTO deliveries (plan_date, environment, slot, scheduled_at, payload) VALUES (${date}, ${r.environment}::environment, ${r.slot}, ${r.at.toISOString()}, ${json(r.payload)}::jsonb)`;
+  return rows.length;
+}

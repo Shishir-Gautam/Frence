@@ -1,0 +1,91 @@
+{
+  "exam": "TCF Canada",
+  "target": {
+    "clb": 7,
+    "cefr_equivalent": "B2 (low)",
+    "note": "IRCC requires the CLB/NCLC level in ALL FOUR skills. A single weak skill fails the whole objective."
+  },
+  "score_bands_clb7": {
+    "listening": { "min": 458, "max": 502, "scale": "100-699" },
+    "reading": { "min": 458, "max": 502, "scale": "100-699" },
+    "speaking": { "min": 10, "max": 11, "scale": "0-20" },
+    "writing": { "min": 10, "max": 11, "scale": "0-20" }
+  },
+  "sections": {
+    "listening": {
+      "questions": 39,
+      "minutes": 35,
+      "format": "Multiple choice, 4 options, audio played ONCE, progressive difficulty from A1 to C2. Everyday situations, announcements, short dialogues, radio-style extracts, then longer opinion pieces.",
+      "clb7_skill": "Understand main ideas and important details of clear speech on familiar and some unfamiliar topics at natural speed; follow a short discussion or radio report; infer speaker attitude.",
+      "strategy": "Points come from the mid-band items (A2-B2). Do not chase C1/C2 items. Train: predicting from the question stem before audio, catching numbers/dates/negation, recognising liaison and elision, spoken register (on vs nous, dropped ne)."
+    },
+    "reading": {
+      "questions": 39,
+      "minutes": 60,
+      "format": "Multiple choice, 4 options, progressive difficulty. Signs, ads, short messages, emails, then articles and opinion columns.",
+      "clb7_skill": "Read moderately complex texts (news, workplace emails, informational articles), find specific information quickly, understand implied meaning and connectors.",
+      "strategy": "Skim question first, scan text. Master connectors (cependant, pourtant, en revanche, d'ailleurs, ainsi, néanmoins) and referents (celui-ci, ce dernier, y, en)."
+    },
+    "writing": {
+      "tasks": 3,
+      "minutes": 60,
+      "format": "Task 1 (60-120 words): short message/description to a friend or on a forum (e.g. describe an event, announce, invite). Task 2 (120-150 words): a factual account/article/blog post narrating an experience or describing a situation for a wider audience. Task 3 (120-180 words): two short opinion texts are given; write a text comparing them and giving your own argued opinion.",
+      "clb7_skill": "Write coherent, moderately complex texts with clear paragraphs, appropriate register, varied vocabulary and mostly correct grammar; express and justify opinions.",
+      "strategy": "Word counts are enforced. Task 3 is where CLB 7 is decided: intro reframing the debate, one paragraph per view, personal argued position, conclusion. Learn a bank of 15 connectors and 20 opinion structures. Always proofread for agreement (accord) and verb endings."
+    },
+    "speaking": {
+      "tasks": 3,
+      "minutes": 12,
+      "format": "Task 1 (2 min, no prep): guided interview - introduce yourself, answer examiner's questions about you. Task 2 (5.5 min, 2 min prep): interaction - YOU ask questions to the examiner to obtain information in a given scenario (e.g. you want to join a club, rent a flat, sign up for a course). Task 3 (4.5 min, no prep): express and defend a point of view on a given topic.",
+      "clb7_skill": "Communicate with reasonable fluency in a range of everyday and some abstract topics; ask well-formed questions; give and support opinions; self-correct; intelligible pronunciation.",
+      "strategy": "Task 2 is unusual: practise FORMING QUESTIONS (est-ce que, inversion, quel/quelle, combien, à quelle heure, est-il possible de...). Task 3: 2-minute structured answer = position + 2 reasons with examples + concession + conclusion. Record yourself daily."
+    }
+  },
+  "grading_rubric_0_20": {
+    "note": "Used by the bot to grade speaking and writing. Map: 0-5 = A1, 6-7 = A2/CLB4-5, 8-9 = B1/CLB6, 10-11 = B2/CLB7, 12-13 = CLB8, 14+ = C1.",
+    "criteria": [
+      { "name": "task_fulfilment", "desc": "Did they do exactly what was asked (all parts, word count, register, audience)?" },
+      { "name": "coherence", "desc": "Paragraphing, logical flow, connectors, referencing." },
+      { "name": "vocabulary", "desc": "Range and precision; topic-appropriate words; avoids repetition and anglicisms." },
+      { "name": "grammar", "desc": "Accuracy of verb forms, agreement, articles, prepositions, pronouns; range of structures (subjunctive, relative clauses, conditional)." },
+      { "name": "fluency_pronunciation", "desc": "SPEAKING ONLY: rhythm, hesitation, intelligibility, nasal vowels, u/ou, r, liaison." }
+    ],
+    "clb7_threshold_descriptor": "Errors present but never block understanding; some complex sentences attempted; opinion clearly justified; connectors used naturally."
+  },
+  "themes": [
+    "se présenter, famille, parcours",
+    "logement, colocation, déménagement",
+    "travail, emploi, entretien, conditions de travail",
+    "études, formation, apprentissage des langues",
+    "santé, sport, alimentation",
+    "transports, ville, voyage",
+    "environnement, écologie, recyclage",
+    "technologie, réseaux sociaux, télétravail",
+    "loisirs, culture, cinéma, musique",
+    "consommation, argent, achats en ligne",
+    "immigration, intégration, vie au Canada, bilinguisme",
+    "actualité et société (vie de quartier, bénévolat, éducation des enfants)"
+  ],
+  "grammar_map_to_clb7": [
+    "présent (tous groupes), verbes pronominaux",
+    "passé composé vs imparfait (récit)",
+    "futur proche, futur simple",
+    "conditionnel présent (politesse, hypothèse)",
+    "impératif",
+    "subjonctif après il faut que / bien que / pour que / vouloir que",
+    "pronoms COD/COI, y, en, doubles pronoms",
+    "pronoms relatifs qui/que/dont/où, ce qui/ce que",
+    "comparatif, superlatif",
+    "négations (ne...jamais/rien/personne/plus)",
+    "interrogation (3 formes) - crucial pour l'expression orale tâche 2",
+    "discours indirect, concordance simple",
+    "connecteurs logiques et articulateurs du discours",
+    "accord participe passé, accord adjectifs"
+  ],
+  "phase_plan_months": {
+    "1-2": "Foundation. Assimil French with Ease lessons 1-50 (one per day, passive wave), daily pronunciation shadowing, 20 new SRS cards/day, micro-writing (3 sentences/day), 1-minute self-introduction recorded weekly.",
+    "3-4": "Assimil 51-100 + active wave (translate EN->FR of earlier lessons). Start TCF-format listening/reading sets weekly. Writing task 1 twice a week. Speaking task 1 & 2 drills (question formation).",
+    "5-6": "Assimil finished. Move to authentic input (RFI Journal en français facile, InnerFrench). Full TCF writing tasks 1-3 weekly, speaking task 3 opinions 3x/week, grammar remediation from error log.",
+    "7-8": "Mock exams weekly under time limits. Remediate weakest skill. Book the exam ~4 weeks before target date."
+  }
+}

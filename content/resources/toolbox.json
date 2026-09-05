@@ -1,0 +1,211 @@
+[
+  {
+    "id": "assimil",
+    "title": "Assimil — French with Ease (113 lessons)",
+    "kind": "course",
+    "environments": [
+      "patrol",
+      "driving"
+    ],
+    "skills": [
+      "listening",
+      "reading"
+    ],
+    "clb_min": 1,
+    "clb_max": 6,
+    "modality": [
+      "audio",
+      "text"
+    ],
+    "minutes_per_unit": 20,
+    "priority": 2,
+    "cadence_rule": "One new lesson per day on patrol, 6 days/week, in order. Replay yesterday's lesson while driving (shadowing). Active wave (EN->FR back-translation of lesson n-50) from lesson 50, 3x/week, seated or patrol. A lesson advances only after its gate check passes.",
+    "url": null,
+    "how_to_use": "Unit payload = {dialogue:[{fr,en}], notes, exercises}. Renderer sends text + slow and normal TTS voice notes. Gate check: back-translation of 3 lines + 1 dictation, 80% to pass."
+  },
+  {
+    "id": "innerfrench",
+    "title": "InnerFrench podcast (Hugo Cotton)",
+    "kind": "podcast",
+    "environments": [
+      "patrol",
+      "driving"
+    ],
+    "skills": [
+      "listening"
+    ],
+    "clb_min": 5,
+    "clb_max": 8,
+    "modality": [
+      "audio"
+    ],
+    "minutes_per_unit": 30,
+    "priority": 3,
+    "cadence_rule": "From listening CLB 5. Max 3 episodes/week, one per patrol block. Not before the learner passes A2-level listening sets at 70%.",
+    "url": "https://innerfrench.com/podcast/",
+    "feed_url": "https://podcast.innerfrench.com/feed.xml",
+    "how_to_use": "Units are episodes pulled from the RSS feed (title, mp3 url, description). Renderer sends the link + 5 pre-listening vocab cards generated from the description. Gate check: recall_qna — 3 questions in French about the episode answered by voice/text, graded for language + 1 summary sentence."
+  },
+  {
+    "id": "rfi_jff",
+    "title": "RFI — Journal en français facile (daily 10-min news)",
+    "kind": "news",
+    "environments": [
+      "patrol",
+      "driving"
+    ],
+    "skills": [
+      "listening",
+      "reading"
+    ],
+    "clb_min": 4,
+    "clb_max": 9,
+    "modality": [
+      "audio",
+      "text"
+    ],
+    "minutes_per_unit": 12,
+    "priority": 3,
+    "cadence_rule": "From listening CLB 4: 2x/week; from CLB 6: daily on patrol or drive. TCF listening mirrors this register (radio news, announcements).",
+    "url": "https://francaisfacile.rfi.fr/fr/podcasts/journal-en-fran%C3%A7ais-facile/",
+    "feed_url": "https://apis.fle.rfi.fr/products/get_product/fle_getpodcast_by_nid?token_application=applepodcast_fle&program.entrepriseId=WBMZ39-FLE-FR-20220627",
+    "how_to_use": "Latest episode from RSS (title, mp3, summary). Renderer sends mp3 link + headline vocab. Gate check: comprehension_mcq (3 items from the summary) + dictation of one headline sentence."
+  },
+  {
+    "id": "francais_authentique",
+    "title": "Français Authentique (Johan Tekfak)",
+    "kind": "podcast",
+    "environments": [
+      "patrol",
+      "driving"
+    ],
+    "skills": [
+      "listening"
+    ],
+    "clb_min": 3,
+    "clb_max": 6,
+    "modality": [
+      "audio"
+    ],
+    "minutes_per_unit": 15,
+    "priority": 4,
+    "cadence_rule": "Bridge between Assimil and InnerFrench, CLB 3-5. Max 2/week.",
+    "url": "https://www.francaisauthentique.com/podcast",
+    "feed_url": "https://francaisauthentique.libsyn.com/rss",
+    "how_to_use": "Same as innerfrench: RSS units, recall_qna gate check."
+  },
+  {
+    "id": "drill_pimsleur",
+    "title": "Driving drill — Pimsleur structure",
+    "kind": "drill_generator",
+    "environments": [
+      "driving"
+    ],
+    "skills": [
+      "speaking",
+      "listening"
+    ],
+    "clb_min": 1,
+    "clb_max": 8,
+    "modality": [
+      "audio"
+    ],
+    "minutes_per_unit": 20,
+    "priority": 1,
+    "cadence_rule": "Default driving item, daily. Graduated-interval recall: prompt (EN) -> 4 s pause -> answer (FR) -> repeat. Best for vocabulary chunks, question forms, high-frequency verb forms.",
+    "url": null,
+    "how_to_use": "DRILL AUTHOR role writes the script from 1-2 target competencies + up to 12 due FSRS cards. Rendered once to MP3 (segments cached). Post-drive spot check: 5 prompts asked back at the next micro slot."
+  },
+  {
+    "id": "drill_michel_thomas",
+    "title": "Driving drill — Michel Thomas structure",
+    "kind": "drill_generator",
+    "environments": [
+      "driving"
+    ],
+    "skills": [
+      "speaking"
+    ],
+    "clb_min": 2,
+    "clb_max": 8,
+    "modality": [
+      "audio"
+    ],
+    "minutes_per_unit": 20,
+    "priority": 2,
+    "cadence_rule": "Use when introducing a NEW grammar competency (tense, mood, pronoun placement): build sentences step by step, no memorising, each prompt adds one element to the previous.",
+    "url": null,
+    "how_to_use": "DRILL AUTHOR role: teach block ≤4 lines, then an expanding sentence chain (je veux -> je veux partir -> je ne veux pas partir -> je ne voulais pas partir…). Spot check after."
+  },
+  {
+    "id": "drill_language_transfer",
+    "title": "Driving drill — Language Transfer (thinking method)",
+    "kind": "drill_generator",
+    "environments": [
+      "driving"
+    ],
+    "skills": [
+      "speaking"
+    ],
+    "clb_min": 2,
+    "clb_max": 7,
+    "modality": [
+      "audio"
+    ],
+    "minutes_per_unit": 20,
+    "priority": 3,
+    "cadence_rule": "Use for derivation-heavy points: EN->FR cognate patterns (-tion, -ité, -ment), verb families, building tenses from known stems. Max 3/week.",
+    "url": null,
+    "how_to_use": "DRILL AUTHOR role: each prompt asks the learner to DERIVE the French from a rule just stated, not recall it. Spot check after."
+  },
+  {
+    "id": "grammar_brief",
+    "title": "Seated grammar micro-lesson (Kwiziq-style)",
+    "kind": "grammar_generator",
+    "environments": [
+      "seated"
+    ],
+    "skills": [
+      "writing",
+      "speaking"
+    ],
+    "clb_min": 1,
+    "clb_max": 9,
+    "modality": [
+      "text",
+      "interactive"
+    ],
+    "minutes_per_unit": 10,
+    "priority": 1,
+    "cadence_rule": "Seated only. Max 2 competencies/day, always the top of v_grammar_weakest that has prerequisites ≥ 60% mastery. Brief (≤180 words) + 6-item adaptive test with typed answers. Item results become weighted grammar evidence.",
+    "url": null,
+    "how_to_use": "EXAMINER role writes rule + examples + 6 fill/transform items with expected/accept lists tagged to the competency."
+  },
+  {
+    "id": "tcf_gen",
+    "title": "TCF Canada task generator (listening/reading sets, writing & speaking tasks, interview)",
+    "kind": "exam_generator",
+    "environments": [
+      "seated",
+      "patrol"
+    ],
+    "skills": [
+      "listening",
+      "reading",
+      "writing",
+      "speaking"
+    ],
+    "clb_min": 1,
+    "clb_max": 12,
+    "modality": [
+      "audio",
+      "text",
+      "interactive"
+    ],
+    "minutes_per_unit": 15,
+    "priority": 1,
+    "cadence_rule": "Every day at least one graded production task (micro below CLB 4, tcf_* tasks from CLB 4 in that skill). Listening sets on patrol (tap MCQ), reading sets seated. Interview (multi-turn S1/S3 simulation) 2x/week from CLB 4 speaking. Sunday: surprise retention test.",
+    "url": null,
+    "how_to_use": "Items carry item_clb; sets are pitched one CLB step above the learner. Grader returns clb_sub per task."
+  }
+]

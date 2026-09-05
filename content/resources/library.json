@@ -1,0 +1,102 @@
+[
+  {
+    "id": "assimil",
+    "title": "Assimil - French with Ease (113 lessons)",
+    "type": "course",
+    "skills": ["listening", "reading", "grammar", "vocab", "pronunciation"],
+    "modality": ["audio", "text"],
+    "contexts": ["patrol", "driving", "seated"],
+    "level": "A0-B1",
+    "minutes_per_unit": 25,
+    "how_bot_uses_it": "Lesson text chunked from the PDF into DB table assimil_lessons; bot generates native-voice TTS for the dialogue and sends as a Telegram voice note. Passive wave: listen + read + repeat. Active wave (from lesson 50): bot sends English lines, you reply in French, bot checks.",
+    "free": false,
+    "owned": true
+  },
+  {
+    "id": "rfi-jff",
+    "title": "RFI - Journal en français facile (daily 10-min news)",
+    "type": "podcast",
+    "url": "https://francaisfacile.rfi.fr/fr/podcasts/journal-en-fran%C3%A7ais-facile/",
+    "skills": ["listening", "vocab"],
+    "modality": ["audio"],
+    "contexts": ["patrol", "driving"],
+    "level": "A2-B2",
+    "minutes_per_unit": 10,
+    "how_bot_uses_it": "From month 3: bot sends the episode link + 5 pre-listening vocab cards + 3 comprehension questions (TCF style) as a quiz afterwards. Transcripts on the site allow reading follow-up.",
+    "free": true
+  },
+  {
+    "id": "innerfrench",
+    "title": "InnerFrench podcast (Hugo Cotton)",
+    "type": "podcast",
+    "url": "https://innerfrench.com/podcast/",
+    "skills": ["listening"],
+    "modality": ["audio"],
+    "contexts": ["patrol", "driving"],
+    "level": "B1-B2",
+    "minutes_per_unit": 30,
+    "how_bot_uses_it": "Month 4+. Intermediate comprehensible input, slow clear French with transcripts.",
+    "free": true
+  },
+  {
+    "id": "francais-authentique",
+    "title": "Français Authentique (Johan)",
+    "type": "podcast",
+    "skills": ["listening"],
+    "modality": ["audio"],
+    "contexts": ["patrol", "driving"],
+    "level": "A2-B1",
+    "minutes_per_unit": 15,
+    "how_bot_uses_it": "Month 2-4 bridge between Assimil and RFI.",
+    "free": true
+  },
+  {
+    "id": "tv5-apprendre",
+    "title": "TV5MONDE Apprendre le français (exercises by level)",
+    "type": "exercises",
+    "url": "https://apprendre.tv5monde.com/",
+    "skills": ["listening", "reading", "grammar"],
+    "modality": ["interactive"],
+    "contexts": ["seated"],
+    "level": "A1-B2",
+    "minutes_per_unit": 15,
+    "how_bot_uses_it": "Seated slot on weak-skill days; bot links a level-appropriate series.",
+    "free": true
+  },
+  {
+    "id": "gemini-tcf-sets",
+    "title": "Bot-generated TCF-style practice sets",
+    "type": "generated",
+    "skills": ["listening", "reading", "writing", "speaking"],
+    "modality": ["audio", "text", "interactive"],
+    "contexts": ["patrol", "driving", "seated"],
+    "level": "A1-B2",
+    "minutes_per_unit": 15,
+    "how_bot_uses_it": "Gemini writes a short passage/dialogue at the target CLB on a TCF theme, TTS renders audio, bot sends 3-4 MCQ as Telegram quiz cards. Also generates writing prompts (tasks 1-3) and speaking prompts (tasks 1-3) from the exam model.",
+    "free": true
+  },
+  {
+    "id": "srs",
+    "title": "In-bot spaced repetition (FSRS)",
+    "type": "srs",
+    "skills": ["vocab", "grammar"],
+    "modality": ["interactive"],
+    "contexts": ["patrol", "seated"],
+    "level": "all",
+    "minutes_per_unit": 8,
+    "how_bot_uses_it": "Cards created automatically from each Assimil lesson, from grading error logs, and from TCF theme word lists. Reviews pushed 3x/day as inline-button cards.",
+    "free": true
+  },
+  {
+    "id": "shadowing",
+    "title": "Shadowing / chorusing (polyglot method)",
+    "type": "method",
+    "skills": ["pronunciation", "speaking", "listening"],
+    "modality": ["audio"],
+    "contexts": ["patrol", "driving"],
+    "level": "all",
+    "minutes_per_unit": 10,
+    "how_bot_uses_it": "Bot sends the Assimil dialogue at slow then normal speed; you speak simultaneously. Weekly: send back a voice note of one dialogue for pronunciation feedback.",
+    "free": true
+  }
+]
