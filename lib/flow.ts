@@ -44,7 +44,11 @@ export async function advance(sendItem: (item: any) => Promise<any>) {
   try { await sendItem(next); }
   catch (e: any) {
     console.error(e);
-    await sendMessage(q.chatId, `⚠️ Couldn't build the next item: ${esc(String(e?.message ?? e)).slice(0, 200)}`, [[{ text: "⏭ Next item", callback_data: "q:next" }]]);
+    const msg = String(e?.message ?? e);
+    const friendly = /exceeded your current quota|check your plan and billing/i.test(msg)
+      ? "⏸ Gemini's free daily quota is used up — this item can't be built until it resets (03:00 Toronto). Everything else stays where it is; tap ⏭ Next item to move on, or come back tomorrow."
+      : `⚠️ Couldn't build the next item: ${esc(msg).slice(0, 200)}`;
+    await sendMessage(q.chatId, friendly, [[{ text: "⏭ Next item", callback_data: "q:next" }]]);
   }
   return true;
 }

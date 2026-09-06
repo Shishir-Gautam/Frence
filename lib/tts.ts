@@ -62,22 +62,89 @@ export async function speakDialogue(lines: { fr: string }[], speed: "slow" | "no
 
 export type DrillStep = { type: "teach" | "prompt" | "answer" | "recap" | "pause"; en?: string; fr?: string; pause_s?: number };
 
-/** Render a drill script into one MP3. prompt -> pause -> answer -> (short gap) -> answer again. */
-export async function renderDrill(script: DrillStep[], pauseDefault = 4, concurrency = 4): Promise<{ mp3: Uint8Array; seconds: number }> {
-  // Synthesise all distinct segments first (bounded concurrency), then assemble in order.
-  const jobs: { text: string; style: Style }[] = [];
-  for (const s of script) {
-    if (s.type === "teach" || s.type === "recap") { if (s.en) jobs.push({ text: s.en, style: "en" }); if (s.fr) jobs.push({ text: s.fr, style: "fr_normal" }); }
-    if (s.type === "prompt" && s.en) jobs.push({ text: s.en, style: "en" });
-    if (s.type === "answer" && s.fr) jobs.push({ text: s.fr, style: "fr_normal" });
+// ---------------------------------------------------------------------------------------------- batching
+// The free tier caps TTS *requests* per day, so a 30-segment drill must not be 30 calls. We synthesise up to
+// 12 short lines in ONE call ("read these with a clear pause between each"), then split the PCM on the silences.
+// If the split doesn't yield exactly the expected number of pieces, we fall back to one call per line.
+const keyOf = (text: string, style: Style) => createHash("sha1").update(`${style}|${style === "en" ? VOICE_EN : VOICE_FR}|${text}`).digest("hex");
+
+export function splitOnSilence(pcm: Int16Array, expected: number): Int16Array[] | null {
+  const frame = Math.round(RATE * 0.02);                     // 20 ms frames
+  const rms: number[] = [];
+  for (let i = 0; i + frame <= pcm.length; i += frame) { let e = 0; for (let j = i; j < i + frame; j++) e += pcm[j] * pcm[j]; rms.push(Math.sqrt(e / frame)); }
+  const peak = Math.max(...rms, 1);
+  const thr = Math.max(peak * 0.04, 120);
+  // all silent gaps ≥ 200 ms that sit between speech (ignore leading silence)
+  const gaps: { at: number; len: number }[] = [];
+  let run = 0, spoken = false;
+  for (let f = 0; f < rms.length; f++) {
+    if (rms[f] < thr) { run++; }
+    else { if (spoken && run >= 10) gaps.push({ at: Math.round((f - run / 2) * frame), len: run }); run = 0; spoken = true; }
   }
-  const uniq = [...new Map(jobs.map((j) => [`${j.style}|${j.text}`, j])).values()];
-  const done = new Map<string, { mp3: Uint8Array; ms: number }>();
-  let i = 0;
-  await Promise.all(Array.from({ length: concurrency }, async () => {
-    while (i < uniq.length) { const j = uniq[i++]; done.set(`${j.style}|${j.text}`, await segment(j.text, j.style)); }
-  }));
-  const get = (text: string, style: Style) => done.get(`${style}|${text}`)!;
+  if (gaps.length < expected - 1) return null;
+  // the line boundaries are the longest gaps; an intra-sentence comma pause is shorter than the "about one second" we asked for
+  const chosen = [...gaps].sort((a, b) => b.len - a.len).slice(0, expected - 1).sort((a, b) => a.at - b.at);
+  const shortest = chosen[chosen.length - 1] ? Math.min(...chosen.map((g) => g.len)) : 0;
+  const longestRejected = Math.max(0, ...gaps.filter((g) => !chosen.includes(g)).map((g) => g.len));
+  if (shortest < 14 || (longestRejected && shortest < longestRejected * 1.3)) return null;   // boundaries not clearly separable
+  const out: Int16Array[] = []; let start = 0;
+  for (const c of [...chosen.map((g) => g.at), pcm.length]) { out.push(trim(pcm.subarray(start, c), thr)); start = c; }
+  return out.every((seg) => seg.length > RATE * 0.25) ? out : null;
+}
+function trim(seg: Int16Array, thr: number): Int16Array {
+  const frame = Math.round(RATE * 0.02);
+  let a = 0, b = seg.length;
+  const loud = (i: number) => { let e = 0; for (let j = i; j < Math.min(i + frame, seg.length); j++) e += seg[j] * seg[j]; return Math.sqrt(e / frame) >= thr; };
+  while (a + frame < b && !loud(a)) a += frame;
+  while (b - frame > a && !loud(b - frame)) b -= frame;
+  return seg.subarray(Math.max(0, a - frame * 3), Math.min(seg.length, b + frame * 3));
+}
+
+/** Synthesise many lines with as few TTS requests as possible; results are cached individually. */
+export async function segmentsBatch(lines: string[], style: Style): Promise<Map<string, { mp3: Uint8Array; ms: number }>> {
+  const out = new Map<string, { mp3: Uint8Array; ms: number }>();
+  const missing: string[] = [];
+  for (const t of [...new Set(lines)]) {
+    const hit = await one`SELECT mp3, duration_ms FROM tts_cache WHERE key = ${keyOf(t, style)}`;
+    if (hit) out.set(t, { mp3: new Uint8Array(hit.mp3), ms: hit.duration_ms }); else missing.push(t);
+  }
+  const voice = style === "en" ? VOICE_EN : VOICE_FR;
+  for (let i = 0; i < missing.length; i += 12) {
+    const batch = missing.slice(i, i + 12);
+    let pieces: Int16Array[] | null = null;
+    if (batch.length > 1) {
+      try {
+        const intro = style === "en"
+          ? "Read the following lines one after another, like a language-course narrator. Leave a clear silent pause of about one second between lines. Do not read any numbers or labels:\n\n"
+          : "Lis les phrases suivantes l'une après l'autre, à vitesse naturelle, avec une pause silencieuse nette d'environ une seconde entre chaque phrase. Ne lis aucun numéro :\n\n";
+        const pcm = await withRetry(() => ttsPcm(intro + batch.join("\n\n"), voice));
+        pieces = splitOnSilence(pcm, batch.length);
+      } catch (e) { console.warn("batch tts failed, falling back", String((e as any)?.message ?? e).slice(0, 100)); }
+    }
+    for (let k = 0; k < batch.length; k++) {
+      const t = batch[k];
+      const seg = pieces ? { mp3: pcmToMp3(pieces[k]), ms: Math.round((pieces[k].length / RATE) * 1000) } : await segment(t, style);
+      if (pieces) await sql`INSERT INTO tts_cache (key, mp3, duration_ms) VALUES (${keyOf(t, style)}, ${Buffer.from(seg.mp3)}, ${seg.ms}) ON CONFLICT DO NOTHING`;
+      out.set(t, seg);
+    }
+  }
+  return out;
+}
+
+/** Render a drill script into one MP3. prompt -> pause -> answer -> (short gap) -> answer again. */
+export async function renderDrill(script: DrillStep[], pauseDefault = 4): Promise<{ mp3: Uint8Array; seconds: number }> {
+  const en: string[] = [], fr: string[] = [];
+  for (const s of script) {
+    if ((s.type === "teach" || s.type === "recap" || s.type === "prompt") && s.en) en.push(s.en);
+    if ((s.type === "teach" || s.type === "recap" || s.type === "answer") && s.fr) fr.push(s.fr);
+  }
+  // teach/recap blocks are long: synthesise them individually; batch the short prompt/answer lines
+  const long = new Set([...en, ...fr].filter((t) => t.length > 160));
+  const enMap = await segmentsBatch(en.filter((t) => !long.has(t)), "en");
+  const frMap = await segmentsBatch(fr.filter((t) => !long.has(t)), "fr_normal");
+  for (const t of en.filter((t) => long.has(t))) enMap.set(t, await segment(t, "en"));
+  for (const t of fr.filter((t) => long.has(t))) frMap.set(t, await segment(t, "fr_normal"));
+  const get = (text: string, style: Style) => (style === "en" ? enMap : frMap).get(text)!;
 
   const parts: Uint8Array[] = [];
   let ms = 0;
