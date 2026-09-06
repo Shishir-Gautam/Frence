@@ -14,7 +14,7 @@ import { sendMorningCard, sendSlot, sendQueued } from "../lib/deliver.js";
 import { advance, clearAll, queueInfo } from "../lib/flow.js";
 import { sendProgress } from "../lib/progress.js";
 import { teachable } from "../lib/grammar.js";
-import { tutor, ask, COMPETENCIES, pingModels, isQuotaExhausted } from "../lib/coach.js";
+import { tutor, ask, COMPETENCIES, pingModels, isQuotaExhausted, quotaPaused } from "../lib/coach.js";
 import { localDate } from "../lib/time.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const l = await getLearner().catch(() => null);
     const msg = String(e?.message ?? e);
     const friendly = isQuotaExhausted(e)
-      ? "⚠️ Gemini's daily free-tier quota is used up for this key — it resets at midnight Pacific (03:00 Toronto). Enabling billing on the key removes the cap (this bot costs a few cents a day)."
+      ? "⏸ Gemini's free-tier daily quota for this key is used up. Deliveries are paused until it resets at 03:00 Toronto (midnight Pacific) — nothing to do on your side. Enabling billing on the key removes the cap for good."
       : /503|high demand|UNAVAILABLE/i.test(msg) ? "⚠️ Gemini is overloaded on every model in the chain right now — try again in a minute."
       : `⚠️ ${esc(msg).slice(0, 300)}`;
     if (l?.chat_id) await sendMessage(l.chat_id, friendly).catch(() => {});
@@ -85,6 +85,9 @@ async function onMessage(m: any) {
 async function onCommand(chatId: number, text: string) {
   const [cmd, ...args] = text.split(/\s+/);
   const c = cmd.toLowerCase().replace(/@.*$/, "");
+  const paused = await quotaPaused();
+  if (paused && paused > new Date() && !["/help", "/start", "/progress", "/skip", "/next", "/exam", "/codes", "/ping"].includes(c))
+    return sendMessage(chatId, `⏸ Paused until ${paused.toLocaleTimeString("en-CA", { timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit" })} Toronto — Gemini's free daily quota is used up. /ping to test it early.`);
   const l = await getLearner();
   const today = localDate(l.tz);
   switch (c) {
@@ -126,7 +129,12 @@ async function onCommand(chatId: number, text: string) {
       const codes = code && COMPETENCIES.some((x) => x.code === code) ? code : (await teachable(1))[0]?.code;
       return codes ? sendGrammarBrief(chatId, codes) : sendMessage(chatId, "Nothing teachable yet.");
     }
-    case "/ping": { await sendMessage(chatId, "Pinging models…"); return sendMessage(chatId, esc((await pingModels()).join("\n"))); }
+    case "/ping": {
+      await sendMessage(chatId, "Pinging models…");
+      const r = await pingModels();
+      if (r.some((x) => x.startsWith("✅"))) await kvDel("quota_paused_until");
+      return sendMessage(chatId, esc(r.join("\n")));
+    }
     case "/codes": return sendMessage(chatId, COMPETENCIES.map((x) => `<code>${x.code}</code> ${esc(x.name)}`).join("\n"));
     case "/listen": return sendListeningSet(chatId, "patrol");
     case "/read": return sendReadingSet(chatId, "seated");

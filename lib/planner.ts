@@ -102,7 +102,7 @@ function validate(plan: Plan, next: any[], teach: any[], clb: Record<string, { c
         if (!cc.length) cc.push(...(teach[0] ? [teach[0].code] : []));
         if (!cc.length) return [];
         const method = ["pimsleur", "michel_thomas", "language_transfer"].includes(it.method) ? it.method : "pimsleur";
-        return [{ ...it, method, competency_codes: cc, minutes: Math.min(25, Math.max(10, Number(it.minutes) || 18)) }];
+        return [{ ...it, method, competency_codes: cc, minutes: Math.min(20, Math.max(8, Number(it.minutes) || 12)) }];
       }
       if (it.type === "srs") return [{ type: "srs", count: Math.min(40, Math.max(5, Number(it.count) || 15)) }];
       if (it.type === "listening_set") return clb.listening.clb >= 3 ? [it] : [];

@@ -3,9 +3,12 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sql } from "../../lib/db.js";
 import { runDelivery } from "../../lib/deliver.js";
 import { authorized } from "../../lib/auth.js";
+import { quotaPaused } from "../../lib/coach.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!authorized(req)) return res.status(401).send("unauthorized");
+  const paused = await quotaPaused();
+  if (paused && paused > new Date()) return res.status(200).json({ paused_until: paused.toISOString() });   // quota gone: hold deliveries, don't spam errors
   await sql`UPDATE deliveries SET status='stale' WHERE status='pending' AND scheduled_at <= now() - interval '6 hours'`;
   // a delivery stuck in 'sending' for 15 min was killed mid-flight: give it one more go, then fail it
   await sql`UPDATE deliveries SET status = CASE WHEN error LIKE 'retried%' THEN 'failed' ELSE 'pending' END, error = 'retried: timeout' WHERE status='sending' AND sent_at IS NULL AND scheduled_at <= now() - interval '15 minutes' AND (error IS NULL OR error NOT LIKE 'retried%')`;

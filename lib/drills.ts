@@ -15,9 +15,9 @@ export async function authorDrill(spec: DrillSpec) {
   const cards = await sql`SELECT id, front, back FROM cards WHERE NOT suspended AND state <> 'new' AND due <= now() + interval '1 day' ORDER BY due LIMIT 12`;
   const comps = spec.competency_codes.map((c) => COMPETENCIES.find((x) => x.code === c)).filter(Boolean);
   const mastery = await sql`SELECT competency_code, mastery_pct FROM grammar_mastery WHERE competency_code = ANY(${spec.competency_codes})`;
-  const target = spec.minutes ?? 18;
+  const target = spec.minutes ?? 12;   // ~14 prompt/answer pairs ≈ 30 TTS segments (recycled cards are cached)
   const r = await ask<{ title: string; script: DrillStep[]; spot_check: Item[] }>("DRILL AUTHOR",
-    `Method: ${spec.method}. Learner level ≈ CLB ${level}. Target ${target} minutes of audio (≈ ${Math.round(target * 1.4)} prompt/answer pairs including recaps).
+    `Method: ${spec.method}. Learner level ≈ CLB ${level}. Target ${target} minutes of audio (≈ ${Math.round(target * 1.2)} prompt/answer pairs including recaps; keep prompts short).
 Target competencies: ${JSON.stringify(comps.map((c) => ({ code: c!.code, name: c!.name, description: c!.description, mastery: mastery.find((m) => m.competency_code === c!.code)?.mastery_pct ?? 0 })))}.
 Due FSRS cards to recycle inside the drill (use at least 8, weave them into the target structures): ${JSON.stringify(cards.map((c) => ({ id: c.id, en: c.front, fr: c.back })))}.
 Pause after each prompt: ${learner.settings?.drill_pause_seconds ?? 4} s (set pause_s per prompt: longer for longer sentences).

@@ -19,6 +19,21 @@ const transient = (e: any) => /\b(503|429|404|UNAVAILABLE|RESOURCE_EXHAUSTED|NOT
 export const isQuotaExhausted = (e: any) => /exceeded your current quota|RESOURCE_EXHAUSTED.*quota|check your plan and billing/i.test(String(e?.message ?? e));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Pause everything until the free-tier daily reset (midnight Pacific) once the quota is gone. */
+export async function quotaPause() {
+  const { kvSet } = await import("./db.js");
+  const now = new Date();
+  const pacificMidnight = new Date(now); pacificMidnight.setUTCHours(7, 5, 0, 0);   // 00:05 PT (UTC-7); off by an hour in winter, harmless
+  if (pacificMidnight <= now) pacificMidnight.setUTCDate(pacificMidnight.getUTCDate() + 1);
+  await kvSet("quota_paused_until", { until: pacificMidnight.toISOString() }, Math.ceil((pacificMidnight.getTime() - now.getTime()) / 60000));
+  return pacificMidnight;
+}
+export async function quotaPaused(): Promise<Date | null> {
+  const { kvGet } = await import("./db.js");
+  const p = await kvGet<{ until: string }>("quota_paused_until");
+  return p ? new Date(p.until) : null;
+}
+
 /** Try each model in order; on a transient error retry once after a short backoff, then move on. */
 export async function withModels<T>(models: string[], fn: (model: string) => Promise<T>): Promise<T> {
   let last: any;
@@ -27,7 +42,7 @@ export async function withModels<T>(models: string[], fn: (model: string) => Pro
       try { return await fn(m); }
       catch (e: any) {
         last = e;
-        if (isQuotaExhausted(e)) throw e;
+        if (isQuotaExhausted(e)) { await quotaPause(); throw e; }
         if (!transient(e)) throw e;
         console.warn(`gemini ${m} transient (${attempt + 1}/2): ${String(e?.message ?? e).slice(0, 120)}`);
         if (attempt === 0) await sleep(1500);
