@@ -121,6 +121,11 @@ async function beginnerPlan(date: string, nightly: boolean): Promise<{ date: str
   if (passedN >= 5 && codes.length) seated.push({ type: "grammar_brief", competency_code: codes[0] });
   if (passedN >= 2) seated.push({ type: "writing", task: "micro" });
   if (passedN >= 2) seated.push({ type: "speaking", task: "micro" });
+  // 2-hour day: a second patrol block replays the previous two lessons for shadowing (the most reliable beginner
+  // pronunciation/rhythm work), the drill is longer, cards are more. Set learner.settings.target_minutes (default 150).
+  const target = Number((await getLearner()).settings?.target_minutes ?? 150);
+  const prev2 = await sql`SELECT id, seq, resource_id, title FROM resource_units WHERE resource_id = ${lesson.resource_id} AND seq < ${lesson.seq} AND status IN ('passed','mastered') ORDER BY seq DESC LIMIT 2`;
+  const patrol2: PlanItem[] = target >= 120 ? prev2.map((u) => ({ type: "unit" as const, resource_id: u.resource_id, unit_id: Number(u.id), title: u.title, mode: "replay" as const })) : [];
   const plan: Plan = {
     focus: `Beginner track — lesson ${lesson.seq}${lesson.status === "attempted" ? " (retest)" : ""}: ${lesson.title ?? ""}`,
     rationale: "Fixed beginner syllabus: no evidence yet, so no evidence-driven planning. Everything is drawn from lessons already met.",
@@ -129,8 +134,9 @@ async function beginnerPlan(date: string, nightly: boolean): Promise<{ date: str
       : `${passedN} lesson${passedN > 1 ? "s" : ""} passed. Today: lesson ${lesson.seq} on patrol, the same lines as a drill in the car, and a short recall of lesson ${prev?.seq ?? "—"} tonight.`,
     slots: [
       { environment: "patrol", slot: "patrol", minutes: 25, items: [{ type: "unit", resource_id: lesson.resource_id, unit_id: Number(lesson.id), title: lesson.title, mode: "study" }] },
-      { environment: "micro", slot: "srs", minutes: 6, items: [{ type: "srs", count: passedN < 3 ? 8 : 12 }] },
-      { environment: "driving", slot: "driving", minutes: 12, items: [{ type: "drill", method: "pimsleur", competency_codes: codes.length ? codes : ["TNS_PRESENT_IRREG"], minutes: 10, unit_id: Number(lesson.id) }] },
+      ...(patrol2.length ? [{ environment: "patrol" as const, slot: "patrol", minutes: 15, items: patrol2 }] : []),
+      { environment: "micro", slot: "srs", minutes: 8, items: [{ type: "srs", count: passedN < 3 ? 8 : target >= 120 ? 15 : 12 }] },
+      { environment: "driving", slot: "driving", minutes: target >= 120 ? 18 : 12, items: [{ type: "drill", method: "pimsleur", competency_codes: codes.length ? codes : ["TNS_PRESENT_IRREG"], minutes: target >= 120 ? 15 : 10, unit_id: Number(lesson.id) }] },
       ...(seated.length ? [{ environment: "seated" as const, slot: "seated", minutes: 20 + seated.length * 5, items: seated }] : []),
     ],
   };
