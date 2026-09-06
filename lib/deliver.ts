@@ -34,7 +34,10 @@ async function sendSrsSlot(chatId: number, count: number) {
 }
 
 export async function sendMorningCard(chatId: number, date: string, plan: Plan) {
-  const lines = plan.slots.map((s) => `${ENV_LABEL[s.environment] ?? s.slot} · ${s.minutes} min\n${s.items.map((i) => "   • " + esc(label(i))).join("\n")}`).join("\n");
+  const done = new Set((await sql`SELECT environment::text AS e FROM deliveries WHERE plan_date = ${date} AND status = 'completed'`).map((r) => r.e));
+  const passedUnits = new Set((await sql`SELECT id FROM resource_units WHERE status IN ('passed','mastered')`).map((r) => Number(r.id)));
+  const mark = (s: Plan["slots"][number], i: PlanItem) => (done.has(s.environment) || (i.type === "unit" && i.mode !== "replay" && passedUnits.has(i.unit_id))) ? "✅ " : "";
+  const lines = plan.slots.map((s) => `${done.has(s.environment) ? "✅ " : ""}${ENV_LABEL[s.environment] ?? s.slot} · ${s.minutes} min\n${s.items.map((i) => "   • " + mark(s, i) + esc(label(i))).join("\n")}`).join("\n");
   const total = plan.slots.reduce((n, s) => n + s.minutes * (s.environment === "micro" ? 3 : 1), 0);
   const kb: Keyboard = [
     [{ text: "🚶 Patrol now", callback_data: "slot:patrol" }, { text: "🃏 Cards", callback_data: "slot:srs" }],

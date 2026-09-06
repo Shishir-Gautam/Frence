@@ -1,5 +1,5 @@
 // In-bot spaced repetition. Typed answers checked by the bot (default); self-rated only for long phrases.
-import { sql, one, json, getLearner, kvGet, kvSet, kvDel, logActivity } from "./db.js";
+import { sql, one, json, raw, getLearner, kvGet, kvSet, kvDel, logActivity } from "./db.js";
 import { schedule, DEFAULT_W, type CardState, type Params, type Rating } from "./fsrs.js";
 import { check, verdictToRating } from "./answer.js";
 import { recordEvidence } from "./grammar.js";
@@ -7,6 +7,7 @@ import { sendMessage, editMessage, esc, type Keyboard } from "./telegram.js";
 import { validCode } from "./coach.js";
 import { localDate } from "./time.js";
 import { busy } from "./flow.js";
+import { stage } from "./stage.js";
 
 export type NewCard = { front: string; back: string; accept?: string[]; kind?: string; answer_mode?: "typed" | "self_rated" | "voice"; competency_code?: string | null; unit_id?: number | null; tags?: string[] };
 
@@ -36,9 +37,12 @@ export async function pickQueue(limit = 15): Promise<number[]> {
   const learner = await getLearner();
   const newPerDay = learner.settings?.new_cards_per_day ?? 20;
   const nt = await one`SELECT COUNT(DISTINCT card_id)::int AS n FROM review_log WHERE (reviewed_at AT TIME ZONE ${learner.tz})::date = ${localDate(learner.tz)}::date AND state_before = 'new'`;
-  const due = await sql`SELECT id FROM cards WHERE NOT suspended AND state <> 'new' AND due <= now() ORDER BY due LIMIT ${limit}`;
+  // Beginner track: only cards that come from lessons you've met (or from checks/drills on them). Nothing else exists for you yet.
+  const beginner = (await stage()) === "beginner";
+  const scope = beginner ? raw(`AND (unit_id IS NOT NULL OR tags && ARRAY['unit_gate','drill_spot','grammar_test','coach_lessons','assimil'])`) : raw("");
+  const due = await sql`SELECT id FROM cards WHERE NOT suspended AND state <> 'new' AND due <= now() ${scope} ORDER BY due LIMIT ${limit}`;
   const budget = Math.max(0, Math.min(newPerDay - (nt?.n ?? 0), limit - due.length));
-  const fresh = budget > 0 ? await sql`SELECT id FROM cards WHERE NOT suspended AND state = 'new' ORDER BY id LIMIT ${budget}` : [];
+  const fresh = budget > 0 ? await sql`SELECT id FROM cards WHERE NOT suspended AND state = 'new' ${scope} ORDER BY id LIMIT ${budget}` : [];
   return [...due, ...fresh].map((r) => Number(r.id));
 }
 
@@ -84,8 +88,9 @@ async function sendCard(chatId: number, s: Session) {
 /** Learner typed an answer for the current typed card. */
 export async function handleTyped(chatId: number, text: string) {
   const s = await kvGet<Session>("srs_session");
-  if (!s?.awaiting_typed) return false;
-  const c = await one`SELECT * FROM cards WHERE id = ${s.awaiting_typed}`;
+  if (!s) return false;
+  // a typed reply to a self-rated card is still an answer: grade it against the back
+  const c = await one`SELECT * FROM cards WHERE id = ${s.awaiting_typed ?? s.queue[s.pos]}`;
   if (!c) return false;
   const verdict = check(text, c.back, c.accept ?? []);
   const rating = verdictToRating(verdict, s.shown_at ? Date.now() - s.shown_at : undefined);

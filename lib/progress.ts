@@ -14,7 +14,7 @@ export async function sendProgress(chatId: number) {
   await updateReceptiveEstimates();
   const learner = await getLearner();
   const clb = await currentClb();
-  const days = Math.floor((Date.now() - new Date(learner.start_date).getTime()) / 86400000);
+  const days = Math.max(0, Math.floor((Date.now() - new Date(learner.start_date).getTime()) / 86400000));
   const skills = ["listening", "reading", "writing", "speaking"] as const;
   const lines = skills.map((s) => `${s.padEnd(9)} ${bar(clb[s].clb)} ${clb[s].clb.toFixed(1)}${clb[s].confidence < 0.4 ? " ?" : ""}`).join("\n");
   const grid = await gridSummary();
@@ -53,6 +53,14 @@ async function streakDays() {
 export async function sendWeeklyReport(chatId: number) {
   await updateReceptiveEstimates();
   const learner = await getLearner();
+  if ((await stage()) === "beginner") {   // no exam talk yet: lessons, checks, cards
+    const wk = await sql`SELECT COUNT(*) FILTER (WHERE passed)::int AS passed, COUNT(*)::int AS checks, ROUND(AVG(score_pct))::int AS avg FROM unit_checks WHERE created_at >= now() - interval '7 days'`;
+    const mins = await one`SELECT COALESCE(SUM(minutes) FILTER (WHERE verified),0)::int AS v FROM activity_log WHERE log_date >= CURRENT_DATE - 6`;
+    const srs = await srsStats();
+    const drills = await one`SELECT COUNT(*)::int AS n, ROUND(AVG(score_pct))::int AS avg FROM drill_sessions WHERE played_at >= now() - interval '7 days'`;
+    await sendMessage(chatId, `🗓 <b>This week</b>\n✅ ${wk[0]?.passed ?? 0} lesson checks passed of ${wk[0]?.checks ?? 0} (avg ${wk[0]?.avg ?? 0}%)\n🚗 ${drills?.n ?? 0} drive spot checks (avg ${drills?.avg ?? 0}%)\n🃏 ${srs.reviews_14d} card reviews · retention ${(Number(srs.retention_14d) * 100).toFixed(0)}%\n⏱ ${mins?.v ?? 0} verified minutes\n\n<i>One lesson a day, every day, is the whole strategy right now. The exam dashboard starts after ~8 lessons.</i>`);
+    return sendProgress(chatId);
+  }
   const days = Math.floor((Date.now() - new Date(learner.start_date).getTime()) / 86400000);
   const data = {
     clb: await currentClb(), expected: expectedClb(days), grid: await gridSummary(), srs: await srsStats(),

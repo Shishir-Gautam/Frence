@@ -16,7 +16,7 @@ import { sendProgress } from "../lib/progress.js";
 import { teachable } from "../lib/grammar.js";
 import { tutor, ask, COMPETENCIES, pingModels, isQuotaExhausted, quotaPaused } from "../lib/coach.js";
 import { localDate } from "../lib/time.js";
-import { startFromZero, stage } from "../lib/stage.js";
+import { startFromZero, stage, INTRO } from "../lib/stage.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(200).send("ok");
@@ -100,7 +100,8 @@ async function onCommand(chatId: number, text: string) {
         [{ text: "🌱 From zero — no test, start lesson 1", callback_data: "zero:yes" }],
         [{ text: "🧪 I know some French — placement test (10 min)", callback_data: "zero:placement" }]]);
     }
-    case "/zero": await startFromZero(); return sendMessage(chatId, "🌱 Beginner track set. /today for your first lesson.");
+    case "/zero": { await startFromZero(); await sendMessage(chatId, INTRO); const { date, plan } = await rebuildToday(); return sendMorningCard(chatId, date, plan); }
+    case "/how": return sendMessage(chatId, INTRO);
     case "/help":
       return sendMessage(chatId, "/today /replan /progress /placement /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/codes (grammar codes) · /exam YYYY-MM-DD · /log 25 min podcast · /skip (abandon current item) · /next\nAny voice note = speaking feedback; any French text = writing feedback; English question = tutor.");
     case "/placement": {
@@ -179,7 +180,7 @@ async function onCallback(q: any) {
 
   if (kind === "srs") return srs.handleCallback(chatId, mid, data);
   if (kind === "zero") {
-    if (a === "yes") { await startFromZero(); await editMessage(chatId, mid, "🌱 Beginner track: fixed lessons, everything drawn from what you've already met. Building day one…"); const { plan } = await buildPlan(localDate(l.tz)); return sendMorningCard(chatId, localDate(l.tz), plan); }
+    if (a === "yes") { await startFromZero(); await editMessage(chatId, mid, "🌱 Beginner track set. Building day one…"); await sendMessage(chatId, INTRO); const { date, plan } = await rebuildToday(); return sendMorningCard(chatId, date, plan); }
     await editMessage(chatId, mid, "🧪 Placement — building it…");
     return checks.startCheck({ chatId, type: "placement", title: "Placement", items: await checks.authorPlacement(), env: "seated", pass_pct: 0 });
   }

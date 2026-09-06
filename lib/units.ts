@@ -1,6 +1,6 @@
 // Resource router runtime: materialise units (Assimil lessons, podcast/news episodes), render them for an
 // environment, and hand off to the gate check. A unit only advances through unit_checks.
-import { sql, one, json, getLearner, kvGet } from "./db.js";
+import { sql, one, json, getLearner, kvGet, kvSet, kvDel } from "./db.js";
 import { sendMessage, sendVoice, sendVoiceById, sendChatAction, esc, type Keyboard } from "./telegram.js";
 import { speakDialogue } from "./tts.js";
 import { ask } from "./coach.js";
@@ -128,8 +128,11 @@ async function sendAssimil(chatId: number, u: any, env: string, mode: "study" | 
       if (n) await sendMessage(chatId, `🃏 ${n} cards from this lesson added.`);
     }
   }
-  const kb: Keyboard = [[{ text: "🧪 Check me (5 items)", callback_data: cb }], [{ text: "📝 Notes & exercises", callback_data: `unit:notes:${u.id}` }]];
-  await sendMessage(chatId, isRevision ? "Read the revision notes, then:" : "When you've listened twice:", isRevision ? [[{ text: "🧪 Check me", callback_data: cb }]] : kb);
+  if (!isRevision && u.payload?.notes) {   // the teaching part: what to notice in this lesson
+    for (const c of splitTelegram(`📝 <b>What to notice</b>\n${esc(String(u.payload.notes).slice(0, 1200))}`)) await sendMessage(chatId, c);
+  }
+  const kb: Keyboard = [[{ text: "🧪 Check me (5 items)", callback_data: cb }], [{ text: "📚 Exercises", callback_data: `unit:notes:${u.id}` }]];
+  await sendMessage(chatId, isRevision ? "Read the revision notes, then:" : "Listened twice and repeated out loud? Then:", isRevision ? [[{ text: "🧪 Check me", callback_data: cb }]] : kb);
 }
 
 async function sendEpisode(chatId: number, u: any, env: string, cb: string) {
@@ -154,8 +157,10 @@ export async function startUnitCheck(chatId: number, unitId: number, env: string
   const last = await one`SELECT items FROM unit_checks WHERE unit_id = ${unitId} AND NOT passed ORDER BY created_at DESC LIMIT 1`;
   const missed = last ? (last.items as any[]).filter((i) => !i.correct && i.expected).map((i) => i.expected) : [];
   if (await kvGet("check_session")) return sendMessage(chatId, "⏳ Finish the current check first (or /skip).");
+  if (await kvGet("check_authoring")) return;                       // double tap
+  await kvSet("check_authoring", { unit: unitId }, 2);
   await sendMessage(chatId, "✍️ Writing your check…");
-  const { items, check_type } = await authorUnitGate(u, env, missed);
+  const { items, check_type } = await authorUnitGate(u, env, missed).finally(() => kvDel("check_authoring"));
   if (!items.length) return sendMessage(chatId, "Couldn't build a check for this unit — try again.");
   await startCheck({ chatId, type: "unit_gate", ref: { table: "resource_units", id: unitId }, title: `Check — ${u.payload?.dialogue ? `Leçon ${u.seq}` : u.title}`, items, env, pass_pct: 80, meta: { check_type, delivery_id: deliveryId } });
 }

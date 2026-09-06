@@ -127,7 +127,7 @@ const t = await teachable(5);
 assert(t.length > 0 && t.every((x: any) => x.code !== "TNS_PC_VS_IMP"), `teachable respects prerequisites (${t.map((x: any) => x.code).join(", ")})`);
 
 // FSRS typed cards
-await addCards([{ front: "the key", back: "la clé", accept: ["la cle"], competency_code: null }, { front: "I am", back: "je suis", competency_code: "TNS_PRESENT_IRREG" }]);
+await addCards([{ front: "the key", back: "la clé", accept: ["la cle"], competency_code: null, tags: ["unit_gate"] }, { front: "I am", back: "je suis", competency_code: "TNS_PRESENT_IRREG", tags: ["unit_gate"] }]);
 await sql`UPDATE cards SET suspended = TRUE WHERE front NOT IN ('the key','I am')`;
 await startSession(CHAT, 5, "micro");
 assert(await handleTyped(CHAT, "la cle"), "typed answer accepted (accent-insensitive)");

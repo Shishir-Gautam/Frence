@@ -73,11 +73,27 @@ export async function ask<T = any>(role: Role, user: string, opts: { audio?: { d
     config: { systemInstruction: system(role), temperature: opts.temperature ?? 0.4, responseMimeType: "application/json" },
   }));
   const txt = (r.text ?? "").trim();
-  try { return JSON.parse(txt) as T; } catch {
-    const m = txt.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (m) return JSON.parse(m[0]) as T;
-    throw new Error(`Gemini (${role}) returned non-JSON: ${txt.slice(0, 200)}`);
+  return extractJson<T>(txt, role);
+}
+
+/** Parse the first complete JSON object/array in a model reply, ignoring fences, prose, or a second stray object after it. */
+export function extractJson<T = any>(txt: string, role = "model"): T {
+  try { return JSON.parse(txt) as T; } catch { /* fall through */ }
+  const cleaned = txt.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  try { return JSON.parse(cleaned) as T; } catch { /* fall through */ }
+  const start = cleaned.search(/[{\[]/);
+  if (start >= 0) {
+    const open = cleaned[start], close = open === "{" ? "}" : "]";
+    let depth = 0, inStr = false, escp = false;
+    for (let i = start; i < cleaned.length; i++) {
+      const ch = cleaned[i];
+      if (inStr) { if (escp) escp = false; else if (ch === "\\") escp = true; else if (ch === '"') inStr = false; continue; }
+      if (ch === '"') inStr = true;
+      else if (ch === open) depth++;
+      else if (ch === close) { depth--; if (depth === 0) { try { return JSON.parse(cleaned.slice(start, i + 1)) as T; } catch { break; } } }
+    }
   }
+  throw new Error(`Gemini (${role}) returned non-JSON: ${txt.slice(0, 200)}`);
 }
 
 /** Free-text answer (TUTOR role, learner questions). */
@@ -112,7 +128,7 @@ export async function pingModels(): Promise<string[]> {
   }
   for (const m of TTS_MODELS) {
     const t0 = Date.now();
-    try { await ai.models.generateContent({ model: m, contents: [{ role: "user", parts: [{ text: "Bonjour" }] }], config: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } } }); out.push(`✅ ${m} TTS (${Date.now() - t0} ms)`); }
+    try { await ai.models.generateContent({ model: m, contents: [{ role: "user", parts: [{ text: "Dis en français : bonjour, ça va ?" }] }], config: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } } }); out.push(`✅ ${m} TTS (${Date.now() - t0} ms)`); }
     catch (e: any) { out.push(`❌ ${m} TTS: ${String(e?.message ?? e).slice(0, 90)}`); }
   }
   return out;

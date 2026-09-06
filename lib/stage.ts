@@ -38,5 +38,18 @@ export function knownClause(k: { lines: string[]; lessons: number }) {
 /** Mark the learner as starting from zero: no placement test, estimates fixed at CLB 1 with full confidence. */
 export async function startFromZero() {
   for (const s of ["listening", "reading", "writing", "speaking"]) await sql`INSERT INTO skill_estimates (skill, clb, confidence, basis) VALUES (${s}::skill, 1, 1, '{"zero":true}'::jsonb)`;
-  await sql`UPDATE learner SET placement_done = TRUE, settings = settings || '{"stage":"beginner"}'::jsonb WHERE id = 1`;
+  const learner = await getLearner();
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: learner.tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  await sql`UPDATE learner SET placement_done = TRUE, start_date = LEAST(start_date, ${today}::date),
+            settings = settings || ${JSON.stringify({ stage: "beginner", zero_started_at: new Date().toISOString() })}::jsonb WHERE id = 1`;
+  // clean slate: cards created by placement / exam-style tests before this point are not your material yet
+  await sql`UPDATE cards SET suspended = TRUE WHERE unit_id IS NULL AND NOT (tags && ARRAY['unit_gate','drill_spot','coach_lessons','assimil'])`;
+  await sql`UPDATE grammar_mastery SET mastery_pct = 0, confidence = 0, evidence_count = 0, correct_streak = 0, status = 'untouched'`;
 }
+
+export const INTRO = `🌱 <b>How this works</b>
+1. A lesson arrives (walk + listen). Tap <b>Check me</b>, answer 5 short questions from it. 80% = passed → next lesson tomorrow; below → same lesson again with what you missed.
+2. Cards arrive 3× a day: type the French. They only contain words from your lessons.
+3. In the car: the lesson's lines as prompt → pause → answer. Say it out loud. A 5-question spot check comes later.
+4. Evening: recall yesterday's lesson from English.
+No commands needed. If something is wrong, /skip. Progress: /progress.`;
