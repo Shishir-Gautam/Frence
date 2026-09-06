@@ -6,6 +6,7 @@ import { ask, randomTheme, clbToCefr, COMPETENCIES } from "./coach.js";
 import { speakFrench } from "./tts.js";
 import { startCheck, authorGrammarTest, sanitize, type Item } from "./checks.js";
 import { markTaught } from "./grammar.js";
+import { knownMaterial, knownClause, stage } from "./stage.js";
 
 /** Listening set: passage as voice note (heard once), then MCQ items via the check engine. */
 export async function sendListeningSet(chatId: number, env = "patrol", deliveryId?: number) {
@@ -56,8 +57,9 @@ const S_SPEC: Record<SpeakingTask, string> = {
 
 export async function sendWritingTask(chatId: number, task: WritingTask = "micro", deliveryId?: number) {
   const clb = (await currentClb()).writing.clb;
+  const scope = task === "micro" && (await stage()) === "beginner" ? knownClause(await knownMaterial()) + " Ask for 2-4 sentences the learner can build from that material; give the prompt in ENGLISH with the French words to use." : "";
   const p = await ask<{ prompt_fr: string; instructions_en: string; helpers: string[]; target_codes: string[] }>("EXAMINER",
-    `${W_SPEC[task]} Learner writing CLB ${clb.toFixed(1)}. Theme: ${randomTheme()}.
+    `${W_SPEC[task]} Learner writing CLB ${clb.toFixed(1)}. Theme: ${randomTheme()}. ${scope}
 Return {"prompt_fr","instructions_en" (word count, time, what graders look for),"helpers":[4-6 expressions with EN gloss],"target_codes":[1-3 competency codes this task should elicit]}`, { temperature: 0.6 });
   if (!p?.prompt_fr) throw new Error("writing task: empty prompt from model");
   const ins = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('writing', ${task}, 'seated', ${String(p.prompt_fr)}) RETURNING id`;
@@ -69,8 +71,9 @@ Return {"prompt_fr","instructions_en" (word count, time, what graders look for),
 
 export async function sendSpeakingTask(chatId: number, task: SpeakingTask = "micro", deliveryId?: number) {
   const clb = (await currentClb()).speaking.clb;
+  const scope = task === "micro" && (await stage()) === "beginner" ? knownClause(await knownMaterial()) + " Ask 3 questions answerable with that material; give them in French WITH English under each." : "";
   const p = await ask<{ prompt_fr: string; instructions_en: string; helpers: string[] }>("EXAMINER",
-    `${S_SPEC[task]} Learner speaking CLB ${clb.toFixed(1)}. Theme: ${randomTheme()}. Return {"prompt_fr","instructions_en","helpers":[4-6 expressions with EN gloss]}`, { temperature: 0.6 });
+    `${S_SPEC[task]} Learner speaking CLB ${clb.toFixed(1)}. Theme: ${randomTheme()}. ${scope} Return {"prompt_fr","instructions_en","helpers":[4-6 expressions with EN gloss]}`, { temperature: 0.6 });
   if (!p?.prompt_fr) throw new Error("speaking task: empty prompt from model");
   const ins = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('speaking', ${task}, 'seated', ${String(p.prompt_fr)}) RETURNING id`;
   await kvSet("awaiting", { kind: "speaking", submission_id: Number(ins[0].id), task, delivery_id: deliveryId }, 12 * 60);

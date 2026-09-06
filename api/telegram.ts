@@ -16,6 +16,7 @@ import { sendProgress } from "../lib/progress.js";
 import { teachable } from "../lib/grammar.js";
 import { tutor, ask, COMPETENCIES, pingModels, isQuotaExhausted, quotaPaused } from "../lib/coach.js";
 import { localDate } from "../lib/time.js";
+import { startFromZero } from "../lib/stage.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(200).send("ok");
@@ -92,7 +93,11 @@ async function onCommand(chatId: number, text: string) {
   const today = localDate(l.tz);
   switch (c) {
     case "/start":
-      return sendMessage(chatId, `👋 Salut ! I'm your TCF Canada coach. Chat id <code>${chatId}</code>.\n${l.placement_done ? "/today for the plan." : "Start with /placement (12 items, ~10 min) so the planner knows your level."}`);
+      if (l.placement_done) return sendMessage(chatId, `👋 Salut ! /today shows the plan; everything else arrives on its own.`);
+      return sendMessage(chatId, `👋 Salut ! I'm your TCF Canada coach.\n\nWhere are you starting from?`, [
+        [{ text: "🌱 From zero — no test, start lesson 1", callback_data: "zero:yes" }],
+        [{ text: "🧪 I know some French — placement test (10 min)", callback_data: "zero:placement" }]]);
+    case "/zero": await startFromZero(); return sendMessage(chatId, "🌱 Beginner track set. /today for your first lesson.");
     case "/help":
       return sendMessage(chatId, "/today /replan /progress /placement /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/codes (grammar codes) · /exam YYYY-MM-DD · /log 25 min podcast · /skip (abandon current item) · /next\nAny voice note = speaking feedback; any French text = writing feedback; English question = tutor.");
     case "/placement": {
@@ -169,6 +174,11 @@ async function onCallback(q: any) {
   const [kind, a, b, c] = data.split(":");
 
   if (kind === "srs") return srs.handleCallback(chatId, mid, data);
+  if (kind === "zero") {
+    if (a === "yes") { await startFromZero(); await editMessage(chatId, mid, "🌱 Beginner track: fixed lessons, everything drawn from what you've already met. Building day one…"); const { plan } = await buildPlan(localDate(l.tz)); return sendMorningCard(chatId, localDate(l.tz), plan); }
+    await editMessage(chatId, mid, "🧪 Placement — building it…");
+    return checks.startCheck({ chatId, type: "placement", title: "Placement", items: await checks.authorPlacement(), env: "seated", pass_pct: 0 });
+  }
   if (kind === "q" && a === "next") { if (!(await advance(sendQueued))) await sendMessage(chatId, "Nothing queued."); return; }
   if (kind === "chk") {
     if (a === "mcq") return checks.answer({ pos: Number(b), mcq: Number(c), messageId: mid });

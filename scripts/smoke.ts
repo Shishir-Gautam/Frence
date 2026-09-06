@@ -137,11 +137,12 @@ assert(rl.length === 2 && rl[0].rating >= 3 && rl[1].rating === 2, `review_log w
 
 // planner -> deliveries
 const { date: today, plan } = await buildPlan();   // tomorrow: full materialisation + drill pre-authoring
-assert(plan.slots.length === 4, "planner produced 4 slots (validated against NEXT UNITS / TEACHABLE)");
+assert(plan.focus.startsWith("Beginner track") && plan.slots.length >= 3, `beginner syllabus used (no Gemini planning): ${plan.slots.length} slots — ${plan.focus}`);
+assert(plan.slots.find((s) => s.environment === "driving")!.items.some((i: any) => i.type === "drill" && i.unit_id), "beginner drill is built from the lesson unit");
 assert(plan.slots.some((s) => s.items.some((i: any) => i.type === "drill" && i.drill_id)), "nightly plan pre-authored the drill");
 assert(!plan.slots.some((s) => s.items.some((i: any) => i.type === "listening_set")), "listening set stripped for a CLB<3 learner");
 const dl = await sql`SELECT slot, environment FROM deliveries WHERE plan_date = ${today} ORDER BY scheduled_at`;
-assert(dl.length === 1 + 1 + 3 + 1 + 1 + 1, `materialised ${dl.length} deliveries (${dl.map((d) => d.slot).join(",")})`);
+assert(dl.length >= 1 + 1 + 3 + 1 + 1, `materialised ${dl.length} deliveries (${dl.map((d) => d.slot).join(",")})`);
 
 // pump: force everything due, run patrol delivery
 await sql`UPDATE deliveries SET scheduled_at = now() - interval '1 minute'`;
@@ -195,7 +196,7 @@ assert(Number((await one`SELECT COUNT(*)::int AS n FROM cards WHERE competency_c
 
 // progress
 await sendProgress(CHAT);
-assert(sent.at(-1).text.includes("Grammar grid"), "progress card renders grid + skills");
+assert(sent.at(-1).text.includes("Beginner track"), "progress card renders the beginner view (lessons, not the exam grid)");
 const st = await srsStats();
 console.log("srs:", st, "\nmessages sent:", sent.length, "| last Gemini role:", lastGeminiRole);
 console.log("\nALL SMOKE CHECKS PASSED");

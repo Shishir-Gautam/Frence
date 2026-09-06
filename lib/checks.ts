@@ -10,6 +10,7 @@ import { speakFrench } from "./tts.js";
 import { addCards, abortSession } from "./srs.js";
 import { localDate } from "./time.js";
 import { busy } from "./flow.js";
+import { knownMaterial, knownClause, stage } from "./stage.js";
 
 export type Item = {
   kind: "typed" | "mcq" | "dictation" | "voice";
@@ -191,8 +192,10 @@ Return {"items":[{"kind":"typed|mcq|dictation|voice","prompt","expected","en":EN
 
 /** EXAMINER writes a grammar brief + 6-item test for a competency. */
 export async function authorGrammarTest(code: string, name: string, description: string, clb: number) {
+  const scope = (await stage()) === "beginner" ? knownClause(await knownMaterial()) + "\nEvery example and every test item must reuse ONLY that material (change subject/negation/question form of known lines; no new verbs or nouns)." : "";
   return ask<{ brief_en: string; examples: { fr: string; en: string }[]; items: Item[] }>("EXAMINER",
     `Competency ${code} — ${name}. ${description}. Learner CLB ${clb}.
+${scope}
 Write: brief_en (≤150 words, the rule, one memory trick, the classic mistake), examples (4 FR/EN pairs), items (6 typed items: fill-in / transform / EN->FR sentence, each tagged competency_code "${code}", with expected + accept variants; item 5 and 6 must be full-sentence production).
 Return {"brief_en","examples":[{"fr","en"}],"items":[{"kind":"typed","prompt","expected","accept":[],"competency_code":"${code}","item_clb":${clb}}]}`, { temperature: 0.3 });
 }

@@ -84,7 +84,7 @@ export async function sendItem(chatId: number, it: PlanItem, env: string, delive
     case "drill": {
       const existing = it.drill_id ? await one`SELECT id FROM drills WHERE id = ${it.drill_id}` :
         await one`SELECT id FROM drills WHERE competency_codes = ${it.competency_codes} AND times_played = 0 AND created_at > now() - interval '3 days' ORDER BY id DESC LIMIT 1`;
-      const id = existing ? Number(existing.id) : await authorDrill({ method: it.method, competency_codes: it.competency_codes, minutes: it.minutes });
+      const id = existing ? Number(existing.id) : await authorDrill({ method: it.method, competency_codes: it.competency_codes, minutes: it.minutes, unit_id: it.unit_id });
       return sendDrill(chatId, id, deliveryId);
     }
     case "grammar_brief": return sendGrammarBrief(chatId, it.competency_code, deliveryId);
@@ -121,7 +121,7 @@ export function label(i: PlanItem | undefined): string {
   if (!i) return "";
   switch (i.type) {
     case "unit": return `${i.resource_id === "assimil" ? "Assimil" : i.resource_id === "coach_lessons" ? "Lesson" : i.resource_id}${i.title ? ` — ${i.title}` : ` #${i.unit_id}`}${i.mode && i.mode !== "study" ? ` (${i.mode})` : ""}`;
-    case "drill": return `Drill (${String(i.method ?? "pimsleur").replace("_", " ")}): ${(i.competency_codes ?? []).filter(validCode).map(competencyName).join(", ")}`;
+    case "drill": return i.unit_id ? `Drill in the car: this lesson's lines, prompt → pause → answer` : `Drill (${String(i.method ?? "pimsleur").replace("_", " ")}): ${(i.competency_codes ?? []).filter(validCode).map(competencyName).join(", ")}`;
     case "grammar_brief": return `Grammar: ${competencyName(i.competency_code)}`;
     case "listening_set": return "TCF listening set";
     case "reading_set": return "TCF reading set";

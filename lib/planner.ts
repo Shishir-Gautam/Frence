@@ -4,12 +4,13 @@ import { ask, validCode } from "./coach.js";
 import { teachable } from "./grammar.js";
 import { nextUnit } from "./units.js";
 import { authorDrill, prerenderDrill } from "./drills.js";
+import { stage } from "./stage.js";
 import { localToUtc, localDate, localWeekday } from "./time.js";
 import { updateReceptiveEstimates } from "./grade.js";
 
 export type PlanItem =
   | { type: "unit"; resource_id: string; unit_id: number; title?: string; mode?: "study" | "replay" | "active" }
-  | { type: "drill"; method: "pimsleur" | "michel_thomas" | "language_transfer"; competency_codes: string[]; minutes?: number; drill_id?: number }
+  | { type: "drill"; method: "pimsleur" | "michel_thomas" | "language_transfer"; competency_codes: string[]; minutes?: number; drill_id?: number; unit_id?: number }
   | { type: "grammar_brief"; competency_code: string }
   | { type: "listening_set" } | { type: "reading_set" }
   | { type: "writing"; task: "micro" | "tcf_w1" | "tcf_w2" | "tcf_w3" }
@@ -38,6 +39,7 @@ export async function buildPlan(forDate?: string): Promise<{ date: string; plan:
   const learner = await getLearner();
   const date = forDate ?? localDate(learner.tz, 1);
   await updateReceptiveEstimates();
+  if ((await stage()) === "beginner") return beginnerPlan(date, !forDate);
   const snap = await plannerSnapshot();
   // make sure each active feed/course has a concrete next unit the planner can reference
   const next: any[] = [];
@@ -90,6 +92,48 @@ ${CONTRACT}`;
   return { date, plan };
 }
 
+/**
+ * BEGINNER SYLLABUS — deterministic, no Gemini call. From zero there is no evidence to plan from, so the day is fixed:
+ *   patrol   : the next lesson (Assimil if loaded, else the coach ladder) → gate check
+ *   cards    : 10 typed cards, all from lessons met so far
+ *   driving  : a Pimsleur-style drill built ONLY from that lesson's lines (+ due cards)
+ *   seated   : active recall of the previous lesson (EN→FR), then from lesson 3 a micro writing/speaking using only known words;
+ *              from lesson 6 one grammar brief tied to the lesson's own codes, its test drawn from known material
+ * No exam-format tasks, no grid-driven grammar, no podcasts.
+ */
+async function beginnerPlan(date: string, nightly: boolean): Promise<{ date: string; plan: Plan }> {
+  const lesson = (await nextUnit("assimil")) ?? (await nextUnit("coach_lessons"));
+  if (!lesson) throw new Error("no lesson unit available (coach ladder authoring failed?)");
+  const prev = await one`SELECT id, seq, resource_id, title FROM resource_units WHERE resource_id = ${lesson.resource_id} AND seq < ${lesson.seq} AND status IN ('passed','mastered') ORDER BY seq DESC LIMIT 1`;
+  const passedN = Number((await one`SELECT COUNT(*)::int AS n FROM resource_units WHERE resource_id IN ('assimil','coach_lessons') AND status IN ('passed','mastered')`)?.n ?? 0);
+  const codes: string[] = (lesson.payload?.codes ?? []).filter(validCode).slice(0, 2);
+  const weekday = localWeekday((await getLearner()).tz, date);
+  const seated: PlanItem[] = [];
+  if (prev) seated.push({ type: "unit", resource_id: prev.resource_id, unit_id: Number(prev.id), title: prev.title, mode: "active" });
+  if (passedN >= 5 && codes.length) seated.push({ type: "grammar_brief", competency_code: codes[0] });
+  if (passedN >= 2) seated.push({ type: "writing", task: "micro" });
+  if (passedN >= 2) seated.push({ type: "speaking", task: "micro" });
+  const plan: Plan = {
+    focus: `Beginner track — lesson ${lesson.seq}${lesson.status === "attempted" ? " (retest)" : ""}: ${lesson.title ?? ""}`,
+    rationale: "Fixed beginner syllabus: no evidence yet, so no evidence-driven planning. Everything is drawn from lessons already met.",
+    message_to_learner: passedN === 0
+      ? "Day one: listen to the lesson twice while walking, read along, repeat out loud. Then tap Check — five short questions, all from the lesson. That's the whole job today."
+      : `${passedN} lesson${passedN > 1 ? "s" : ""} passed. Today: lesson ${lesson.seq} on patrol, the same lines as a drill in the car, and a short recall of lesson ${prev?.seq ?? "—"} tonight.`,
+    slots: [
+      { environment: "patrol", slot: "patrol", minutes: 25, items: [{ type: "unit", resource_id: lesson.resource_id, unit_id: Number(lesson.id), title: lesson.title, mode: "study" }] },
+      { environment: "micro", slot: "srs", minutes: 6, items: [{ type: "srs", count: passedN < 3 ? 8 : 12 }] },
+      { environment: "driving", slot: "driving", minutes: 12, items: [{ type: "drill", method: "pimsleur", competency_codes: codes.length ? codes : ["TNS_PRESENT_IRREG"], minutes: 10, unit_id: Number(lesson.id) }] },
+      ...(seated.length ? [{ environment: "seated" as const, slot: "seated", minutes: 20 + seated.length * 5, items: seated }] : []),
+    ],
+  };
+  if (weekday === "Sunday" && passedN >= 6) plan.slots[plan.slots.length - 1].items.push({ type: "surprise_test" });
+  if (nightly) await preauthor(plan);
+  await sql`INSERT INTO plans (plan_date, plan, inputs_digest) VALUES (${date}, ${json(plan)}::jsonb, ${json({ stage: "beginner", lesson: lesson.seq, passed: passedN })}::jsonb)
+            ON CONFLICT (plan_date) DO UPDATE SET plan = EXCLUDED.plan, inputs_digest = EXCLUDED.inputs_digest, created_at = now()`;
+  await materialise(date, plan);
+  return { date, plan };
+}
+
 function validate(plan: Plan, next: any[], teach: any[], clb: Record<string, { clb: number }>) {
   const unitIds = new Set(next.map((n) => n.unit_id));
   const codes = new Set(teach.map((t: any) => t.code));
@@ -132,7 +176,7 @@ function validate(plan: Plan, next: any[], teach: any[], clb: Record<string, { c
 export async function preauthor(plan: Plan) {
   for (const s of plan.slots) for (const it of s.items) {
     if (it.type !== "drill" || it.drill_id) continue;
-    try { it.drill_id = await authorDrill({ method: it.method, competency_codes: it.competency_codes, minutes: it.minutes }); await prerenderDrill(it.drill_id); }
+    try { it.drill_id = await authorDrill({ method: it.method, competency_codes: it.competency_codes, minutes: it.minutes, unit_id: it.unit_id }); await prerenderDrill(it.drill_id); }
     catch (e) { console.error("preauthor drill", e); }
   }
 }
