@@ -6,10 +6,26 @@
     "note": "IRCC requires the CLB/NCLC level in ALL FOUR skills. A single weak skill fails the whole objective."
   },
   "score_bands_clb7": {
-    "listening": { "min": 458, "max": 502, "scale": "100-699" },
-    "reading": { "min": 458, "max": 502, "scale": "100-699" },
-    "speaking": { "min": 10, "max": 11, "scale": "0-20" },
-    "writing": { "min": 10, "max": 11, "scale": "0-20" }
+    "listening": {
+      "min": 458,
+      "max": 502,
+      "scale": "100-699"
+    },
+    "reading": {
+      "min": 453,
+      "max": 498,
+      "scale": "100-699"
+    },
+    "speaking": {
+      "min": 10,
+      "max": 11,
+      "scale": "0-20"
+    },
+    "writing": {
+      "min": 10,
+      "max": 11,
+      "scale": "0-20"
+    }
   },
   "sections": {
     "listening": {
@@ -44,11 +60,26 @@
   "grading_rubric_0_20": {
     "note": "Used by the bot to grade speaking and writing. Map: 0-5 = A1, 6-7 = A2/CLB4-5, 8-9 = B1/CLB6, 10-11 = B2/CLB7, 12-13 = CLB8, 14+ = C1.",
     "criteria": [
-      { "name": "task_fulfilment", "desc": "Did they do exactly what was asked (all parts, word count, register, audience)?" },
-      { "name": "coherence", "desc": "Paragraphing, logical flow, connectors, referencing." },
-      { "name": "vocabulary", "desc": "Range and precision; topic-appropriate words; avoids repetition and anglicisms." },
-      { "name": "grammar", "desc": "Accuracy of verb forms, agreement, articles, prepositions, pronouns; range of structures (subjunctive, relative clauses, conditional)." },
-      { "name": "fluency_pronunciation", "desc": "SPEAKING ONLY: rhythm, hesitation, intelligibility, nasal vowels, u/ou, r, liaison." }
+      {
+        "name": "task_fulfilment",
+        "desc": "Did they do exactly what was asked (all parts, word count, register, audience)?"
+      },
+      {
+        "name": "coherence",
+        "desc": "Paragraphing, logical flow, connectors, referencing."
+      },
+      {
+        "name": "vocabulary",
+        "desc": "Range and precision; topic-appropriate words; avoids repetition and anglicisms."
+      },
+      {
+        "name": "grammar",
+        "desc": "Accuracy of verb forms, agreement, articles, prepositions, pronouns; range of structures (subjunctive, relative clauses, conditional)."
+      },
+      {
+        "name": "fluency_pronunciation",
+        "desc": "SPEAKING ONLY: rhythm, hesitation, intelligibility, nasal vowels, u/ou, r, liaison."
+      }
     ],
     "clb7_threshold_descriptor": "Errors present but never block understanding; some complex sentences attempted; opinion clearly justified; connectors used naturally."
   },

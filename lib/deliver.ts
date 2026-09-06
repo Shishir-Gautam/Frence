@@ -125,7 +125,9 @@ export async function sendItem(chatId: number, it: PlanItem, env: string, delive
   }
 }
 
+/** A day is measured against the day's target, not against attendance: 127/150 is 85% of target, not a failure. */
 export async function sendCheckin(chatId: number, date: string) {
+  const learner = await getLearner();
   const m = await one`SELECT COALESCE(SUM(minutes),0)::int AS mins, COALESCE(SUM(minutes) FILTER (WHERE verified),0)::int AS verified FROM activity_log WHERE log_date = ${date}`;
   const d = await sql`SELECT slot, status FROM deliveries WHERE plan_date = ${date} AND slot NOT IN ('morning_card','checkin')`;
   const completed = d.filter((x) => x.status === "completed").length, sent = d.filter((x) => ["sent", "completed"].includes(x.status)).length;
@@ -134,8 +136,16 @@ export async function sendCheckin(chatId: number, date: string) {
   const { CURRICULUM } = await import("./units.js");
   const passed = Number((await one`SELECT COUNT(*)::int AS n FROM resource_units WHERE resource_id IN ('assimil','coach_lessons') AND status IN ('passed','mastered')`)?.n ?? 0);
   const next = CURRICULUM.units[Math.min(passed, CURRICULUM.units.length - 1)];
+  const target = Number(learner.settings?.target_minutes ?? 150);
+  const done = Number(m?.verified ?? 0), pct = Math.round((done / Math.max(1, target)) * 100);
+  // the 7-day average is what actually predicts the exam outcome; one short day changes nothing
+  const wk = await one`SELECT COALESCE(SUM(minutes) FILTER (WHERE verified),0)::int AS v, COUNT(DISTINCT log_date)::int AS days FROM activity_log WHERE log_date > ${date}::date - 7 AND log_date <= ${date}::date`;
+  const avg = Math.round(Number(wk?.v ?? 0) / 7);
+  const verdict = avg >= target * 0.85 ? "On trajectory." : avg >= target * 0.6 ? "Slightly under — the week still averages out." : "Under target for the week; the planner will shorten items rather than pile them up.";
+  const bar = "█".repeat(Math.min(10, Math.round(pct / 10))) + "░".repeat(Math.max(0, 10 - Math.round(pct / 10)));
   await sendMessage(chatId,
-    `🌙 <b>Check-in</b> — <b>${m?.verified ?? 0} min verified</b> (${m?.mins ?? 0} logged) · ${completed}/${sent} slots completed.\n` +
+    `🌙 <b>Check-in</b>\n<code>${bar}</code> <b>${done}/${target} min · ${pct}% of target</b>${m?.mins && m.mins > done ? ` (+${Number(m.mins) - done} reported)` : ""}\n` +
+    `📅 7-day average ${avg} min/day — ${esc(verdict)}\n🎯 ${completed}/${sent} slots completed.\n\n` +
     `Tomorrow's first step (2 min): <i>${esc(next.first_step)}</i>\n` +
     `<i>Extra time to report? /log 25 min podcast driving. The plan lands at 06:30.</i>`,
     [[{ text: "😴 Done for today", callback_data: "checkin:done" }]]);

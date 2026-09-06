@@ -81,6 +81,10 @@ async function finish(chatId: number, skill: "writing" | "speaking", sub: any, g
     if (!code && c.error_type && c.error_type !== "grammar") await bumpErrorPattern(String(c.why ?? c.error_type).slice(0, 60), String(c.error_type), `${c.original} → ${c.fix}`);
   }
   await recordEvidence("submission", sub.id, ev);
+  // exam evidence: a tcf_* task or a full interview is TCF-shaped; a micro/free task is not
+  const { recordExam } = await import("./nclc.js");
+  await recordExam({ component: skill, source: "submission", source_id: sub.id, item_clb: clb,
+                     exam_format: /^(tcf_|interview)/.test(String(sub.task_type)) });
   const added = await addCards((g.new_cards ?? []).slice(0, 6).map((c) => ({ ...c, kind: c.kind ?? "error", tags: [skill, "error"] })));
   const learner = await getLearner();
   await logActivity(localDate(learner.tz), "seated", skill, skill === "writing" ? 15 : 8, true, { table: "submissions", id: sub.id });

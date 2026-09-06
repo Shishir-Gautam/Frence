@@ -27,6 +27,8 @@ lib/grammar.ts            evidence -> mastery recompute (recency & weight, shrin
 lib/fsrs.ts + srs.ts      FSRS-4.5 (params from DB), typed-answer cards, review_log
 lib/answer.ts             accent-insensitive answer checking with an "almost" tier
 lib/progress.ts           /progress, weekly report, placement estimate
+lib/nclc.ts               NCLC/TCF bands, exam_evidence -> readiness card (estimate vs validation)
+lib/live.ts               "say it in French": an English thought -> production -> evidence + card
 lib/seed.ts               schema + toolbox + grid seeding
 db/schema.sql             21 tables + 3 views (see comments)
 content/exam/tcf-canada.json         exam model
@@ -57,6 +59,22 @@ scripts/smoke.ts          end-to-end test with Gemini + Telegram mocked (runs ag
 
 `content/curriculum/beginner.json` — 40 units in 3 stages (Survival & sounds → Daily life & the past → Telling & explaining), zero → CLB 4 at one unit a day. Vocabulary order follows corpus frequency (Lonsdale & Le Bras, *A Frequency Dictionary of French*: the first ~1,000 lemmas cover ~80% of everyday text), grammar order follows the CEFR reference inventories for French (Beacco et al., *Niveau A1 / A2 pour le français*) and the CLB 1–4 descriptors, pronunciation comes first (sound discrimination gates listening and memory), and themes are the learner's own life (self-reference effect). Each unit = one lesson: **learn** (goal, new words + audio, dialogue, what to notice) → **practice** (4 guided, unscored items) → **check** (5 scored items, 80% to pass). Cards, the car drill and the evening recall reuse only that unit's material. From unit 29 one exam-format listening/reading set a day; after unit 40 (or unit 28 + listening CLB 3) the evidence-driven planner takes over. `/roadmap` shows the map; the morning card shows `Unit n/40 · Stage · streak` and a 🔥 **Start (2 min)** button (the smallest first step: the new words and their audio), and the check-in names tomorrow's first step — getting started is the hard part, so the first action is always tiny and already chosen.
 
+## Exam readiness (NCLC), measured from day one
+
+`/nclc` answers "if I sat the TCF tomorrow, what would I get?" — and, just as importantly, says what that answer rests on. Every scored thing writes a row to `exam_evidence` (component, item CLB, whether it was TCF-shaped), so the measurement layer has history instead of being bolted on in month six. `lib/nclc.ts` maps an estimate onto the IRCC bands (`content/exam/nclc-bands.json`, NCLC 4–10; NCLC 7 = listening 458–502, reading 453–498, speaking and writing 10–11/20) and labels it:
+
+| label | what it means |
+|---|---|
+| AI estimate | the grader's read on your recent work; little or none of it TCF-shaped |
+| test-backed | ≥8 exam-format items/tasks, ≥4 of them at CLB 6+ |
+| mock-validated | a timed mock section has actually been sat |
+
+Ability and validation are never merged into one number: "NCLC 6 (AI estimate)" and "NCLC 6 (mock-validated)" are different claims and the bot has to say which one it's making.
+
+## Say it in French
+
+Send the bot an English thought — "I have to go to work at eight tomorrow" — and it doesn't answer it, it makes you produce it, grades what you produced against the natural version, files the errors as grammar evidence and error patterns, and saves the thought as an FSRS card. An English **question** still goes to the tutor; an English **statement** becomes a challenge. `/fr [thought]`, or `/fr` alone for one it invents. Voice or typed. It feeds evidence and cards, never the exam estimate — your own sentences aren't a TCF task.
+
 ## A day (defaults in `learner.schedule`)
 
 | time | environment | what happens |
@@ -66,7 +84,7 @@ scripts/smoke.ts          end-to-end test with Gemini + Telegram mocked (runs ag
 | 10:00 / 13:00 / 19:30 | micro | FSRS cards, **typed** — the bot checks the answer, maps it to Again/Hard/Good/Easy, reschedules |
 | 15:15 | driving | one MP3 drill (Pimsleur / Michel Thomas / Language Transfer structure) on 1–2 grid competencies, recycling due cards → **Spot check** (5 prompts) at the next micro slot |
 | 17:30 | seated | grammar brief + 6-item typed test (≤2 competencies), writing task (reply text), speaking task / multi-turn interview (reply voice), reading set — delivered **one item at a time**; the next arrives when the current one is scored (or ⏭ Next item) |
-| 21:30 | — | check-in: verified vs reported minutes, slots completed |
+| 21:30 | — | check-in: minutes **against the day's target** (127/150 = 85%, with the 7-day average and an on-track verdict), slots completed, tomorrow's 2-minute first step |
 | 22:30 | — | planner: decay grid, refresh estimates, write tomorrow |
 | Sun | seated | surprise retention test from the last 3 weeks + weekly review |
 

@@ -48,6 +48,12 @@ function mockGemini(role: string, user: string): any {
     ...Array.from({ length: 8 }, (_, i) => [{ type: "prompt", en: `I am tired ${i}`, pause_s: 3 }, { type: "answer", fr: `Je suis fatigué ${i}` }]).flat(),
     { type: "recap", en: "Recap.", fr: "je suis, tu es" }],
     spot_check: Array.from({ length: 5 }, (_, i) => ({ kind: "typed", prompt: `I am tired ${i}`, expected: `Je suis fatigué ${i}`, accept: [], competency_code: "TNS_PRESENT_IRREG" })) };
+  if (role === "GRADER" && /LIVE PRODUCTION/.test(user)) return {
+    transcript: null, verdict: "partly", natural_fr: "Je dois aller travailler à huit heures demain.",
+    literal_note: "aller travailler, not aller au travail", clb: 4,
+    corrections: [{ original: "aller au travail", fix: "aller travailler", why: "more natural with an activity", competency_code: null, error_type: "lexis" }],
+    grammar_evidence: [{ competency_code: "TNS_PRESENT_IRREG", correct: true, excerpt: "je dois" }],
+    card: { front: "I have to go to work at eight tomorrow", back: "Je dois aller travailler à huit heures demain.", accept: [] } };
   if (role === "GRADER") return { task_type: "micro", clb_sub: 3.5, score_20: 6, criteria: { task_fulfilment: 4, coherence: 3, vocabulary: 3, grammar: 3, fluency_pronunciation: null },
     transcript: null, corrected_text: "Je suis gardien. J'habite à Toronto depuis un an.",
     corrections: [{ original: "j'ai habité à Toronto depuis un an", fix: "j'habite à Toronto depuis un an", why: "depuis + présent", competency_code: "TNS_INDICATEURS_TEMPS", error_type: "grammar" }],
@@ -96,12 +102,14 @@ import { authorDrill, sendDrill, startSpotCheck } from "../lib/drills.js";
 import { sendGrammarBrief, startGrammarTest } from "../lib/generate.js";
 import { gradeWriting } from "../lib/grade.js";
 import { sendProgress } from "../lib/progress.js";
+import { challenge, liveAnswer, looksLikeQuestion } from "../lib/live.js";
+import { readiness, projectedScore, sendReadiness } from "../lib/nclc.js";
 import { localDate } from "../lib/time.js";
 
 const assert = (c: any, m: string) => { if (!c) { console.error("❌ " + m); process.exit(1); } console.log("✓ " + m); };
 const CHAT = 42;
 
-for (const t of ["review_log", "cards", "unit_checks", "drill_sessions", "drills", "grammar_evidence", "submissions", "quiz_results", "activity_log", "deliveries", "plans", "resource_units", "kv", "skill_estimates", "tts_cache"]) await sql`DELETE FROM ${new (await import("../lib/db.js")).Raw(t)}`;
+for (const t of ["review_log", "exam_evidence", "error_patterns", "cards", "unit_checks", "drill_sessions", "drills", "grammar_evidence", "submissions", "quiz_results", "activity_log", "deliveries", "plans", "resource_units", "kv", "skill_estimates", "tts_cache"]) await sql`DELETE FROM ${new (await import("../lib/db.js")).Raw(t)}`;
 await sql`UPDATE grammar_mastery SET mastery_pct = 0, confidence = 0, evidence_count = 0, status = 'untouched', last_evidence = NULL`;
 
 const seeded = await seedAll();
@@ -200,6 +208,31 @@ assert(Number(sub!.clb_sub) === 3.5, `grader stored clb_sub ${sub!.clb_sub} / ${
 const est = await one`SELECT clb FROM v_current_clb WHERE skill = 'writing'`;
 assert(Number(est!.clb) === 3.5, "writing CLB estimate updated from submissions");
 assert(Number((await one`SELECT COUNT(*)::int AS n FROM cards WHERE competency_code = 'TNS_INDICATEURS_TEMPS'`)!.n) >= 1, "error card created with competency tag");
+
+// "say it in French": an English thought becomes production, evidence and a card
+assert(looksLikeQuestion("why is it le and not la?") && !looksLikeQuestion("I have to go to work at eight tomorrow"),
+  "English questions go to the tutor, statements become production challenges");
+await challenge(CHAT, "I have to go to work at eight tomorrow");
+assert(String(sent.at(-1).text).includes("Say it in French"), "live challenge sent");
+assert(await liveAnswer({ text: "Je dois aller au travail à huit heures demain." }), "live attempt consumed");
+assert(String(sent.at(-2).text).includes("More natural"), "graded against a natural version");
+assert(Number((await one`SELECT COUNT(*)::int AS n FROM cards WHERE 'live' = ANY(tags)`)!.n) === 1, "the thought became an FSRS card");
+assert(Number((await one`SELECT COUNT(*)::int AS n FROM grammar_evidence WHERE source_type = 'live'`)!.n) >= 1, "live production wrote grammar evidence");
+assert(Number((await one`SELECT COUNT(*)::int AS n FROM error_patterns WHERE kind = 'lexis'`)!.n) >= 1, "non-grammar miss became an error pattern");
+assert(!(await one`SELECT 1 FROM kv WHERE k = 'live_session'`), "live session closed after grading");
+
+// exam readiness: evidence collected from day one, and an estimate that says what backs it
+const ex = await one`SELECT COUNT(*)::int AS n, COUNT(*) FILTER (WHERE exam_format)::int AS fmt FROM exam_evidence`;
+assert(Number(ex!.n) >= 3 && Number(ex!.fmt) === 0, `exam evidence collected from day one (${ex!.n} rows) — none of it exam-format yet, correctly`);
+await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('writing','tcf_w3','seated','Comparez les deux textes')`;
+await gradeWriting(CHAT, "Je pense que le premier texte a raison.");
+assert(Number((await one`SELECT COUNT(*)::int AS n FROM exam_evidence WHERE exam_format`)!.n) === 1, "a tcf_* task is flagged exam-format; a micro task is not");
+const rd = await readiness();
+const wr = rd.find((r) => r.component === "writing")!;
+assert(wr.clb === 3.5 && wr.validation === "ai_estimate", `writing reads NCLC ${wr.clb} labelled "${wr.label}" — never presented as a result`);
+assert(projectedScore("listening", 7) === 458 && projectedScore("reading", 7) === 453, "NCLC 7 maps to the IRCC TCF bands (L 458+, R 453+)");
+await sendReadiness(CHAT);
+assert(String(sent.at(-1).text).includes("no full mock yet"), "readiness card states exam validation honestly");
 
 // progress
 await sendProgress(CHAT);

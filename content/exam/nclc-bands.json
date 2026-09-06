@@ -1,0 +1,15 @@
+{
+  "source": "IRCC language test equivalency charts — TCF Canada (checked 2026-09-06)",
+  "note": "NCLC is the French scale; CLB is its English twin and the numbers are the same. Listening/reading are raw TCF scores on 100-699; speaking/writing are marks on 0-20. Anything below NCLC 4 is reported by TCF as a single low band, so we do not pretend to resolve it.",
+  "scales": { "listening": "100-699", "reading": "100-699", "speaking": "0-20", "writing": "0-20" },
+  "levels": {
+    "4":  { "listening": [331, 368], "reading": [342, 374], "speaking": [4, 5],   "writing": [4, 5] },
+    "5":  { "listening": [369, 397], "reading": [375, 405], "speaking": [6, 6],   "writing": [6, 6] },
+    "6":  { "listening": [398, 457], "reading": [406, 452], "speaking": [7, 9],   "writing": [7, 9] },
+    "7":  { "listening": [458, 502], "reading": [453, 498], "speaking": [10, 11], "writing": [10, 11] },
+    "8":  { "listening": [503, 522], "reading": [499, 523], "speaking": [12, 13], "writing": [12, 13] },
+    "9":  { "listening": [523, 548], "reading": [524, 548], "speaking": [14, 15], "writing": [14, 15] },
+    "10": { "listening": [549, 699], "reading": [549, 699], "speaking": [16, 20], "writing": [16, 20] }
+  },
+  "target": 7
+}

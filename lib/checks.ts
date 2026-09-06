@@ -11,6 +11,7 @@ import { addCards, abortSession } from "./srs.js";
 import { localDate } from "./time.js";
 import { busy } from "./flow.js";
 import { knownMaterial, knownClause, stage } from "./stage.js";
+import { recordExamItems } from "./nclc.js";
 
 export type Item = {
   kind: "typed" | "mcq" | "dictation" | "voice";
@@ -140,6 +141,8 @@ async function finish(s: CheckSession): Promise<void> {
   // receptive items -> quiz_results (feeds listening/reading CLB estimates)
   for (const i of s.items) if (i.skill === "listening" || i.skill === "reading")
     await sql`INSERT INTO quiz_results (skill, item_clb, correct, unit_id, question, environment) VALUES (${i.skill}::skill, ${i.item_clb ?? 3}, ${!!i.correct}, ${s.ref?.table === "resource_units" ? s.ref.id : null}, ${i.prompt}, ${s.env}::environment)`;
+  // ...and to exam_evidence, flagged by whether this was a TCF-shaped set or a lesson exercise
+  await recordExamItems(s.items, { exam_format: s.type === "listening_set" || s.type === "reading_set", source_id: s.ref?.id ?? null });
   // missed items -> cards
   // missed items -> cards (dictation/voice only when we have an EN gloss, otherwise the card front would be "Dictée")
   const missed = s.items.filter((i) => !i.correct && i.expected && i.kind !== "mcq" && (i.kind === "typed" || i.en));

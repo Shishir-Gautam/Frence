@@ -18,6 +18,8 @@ import { tutor, ask, COMPETENCIES, pingModels, isQuotaExhausted, quotaPaused } f
 import { localDate } from "../lib/time.js";
 import { startFromZero, stage, INTRO } from "../lib/stage.js";
 import { startPractice, practiceAnswer, explainLastMiss } from "../lib/teach.js";
+import { challenge, liveAnswer, looksLikeQuestion } from "../lib/live.js";
+import { sendReadiness } from "../lib/nclc.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(200).send("ok");
@@ -67,6 +69,7 @@ async function onMessage(m: any) {
     const bytes = await downloadFile(f.file_id);
     const mime = f.mime_type ?? "audio/ogg";
     if (await checks.answer({ audio: { data: bytes, mime } })) return;          // voice item in a check
+    if (await liveAnswer({ audio: { data: bytes, mime } })) return;            // spoken answer to "say it in French"
     return gradeSpeaking(chatId, bytes, mime, f.file_id, f.duration);         // interview turn, speaking task, or free speaking
   }
   if (!text) return;
@@ -76,12 +79,15 @@ async function onMessage(m: any) {
   if (await checks.answer({ text })) return;
   if (await practiceAnswer(text)) return;
   if (await srs.handleTyped(chatId, text)) return;
+  if (await liveAnswer({ text })) return;                                     // typed answer to "say it in French"
 
   const awaiting = await kvGet<any>("awaiting");
   if (await kvGet("interview_session")) { await sendMessage(chatId, "🎙 The interview is by voice — hold the mic and answer, or tap ⏹ End interview."); return; }
   if (awaiting?.kind === "writing") return gradeWriting(chatId, text);
   if (awaiting?.kind === "checkin" && !looksFrench(text) && /\b\d{1,3}\s*(min|minutes|h|hours?)\b/i.test(text)) return parseAndLog(chatId, text);
   if (looksFrench(text)) return gradeWriting(chatId, text);
+  // English: a question is for the tutor; a thought about your own life is something to say in French
+  if (!looksLikeQuestion(text) && text.split(/\s+/).length >= 3) return void (await challenge(chatId, text));
   await sendMessage(chatId, esc(await tutor(text)));
 }
 
@@ -89,7 +95,7 @@ async function onCommand(chatId: number, text: string) {
   const [cmd, ...args] = text.split(/\s+/);
   const c = cmd.toLowerCase().replace(/@.*$/, "");
   const paused = await quotaPaused();
-  if (paused && paused > new Date() && !["/help", "/start", "/progress", "/skip", "/next", "/exam", "/codes", "/ping"].includes(c))
+  if (paused && paused > new Date() && !["/help", "/start", "/progress", "/skip", "/next", "/exam", "/nclc", "/readiness", "/roadmap", "/codes", "/ping"].includes(c))
     return sendMessage(chatId, `⏸ Paused until ${paused.toLocaleTimeString("en-CA", { timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit" })} Toronto — Gemini's free daily quota is used up. /ping to test it early.`);
   const l = await getLearner();
   const today = localDate(l.tz);
@@ -115,7 +121,7 @@ async function onCommand(chatId: number, text: string) {
       return;
     }
     case "/help":
-      return sendMessage(chatId, "/today /roadmap /progress /how /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/codes (grammar codes) · /exam YYYY-MM-DD · /log 25 min podcast · /skip (abandon current item) · /next\nAny voice note = speaking feedback; any French text = writing feedback; English question = tutor.");
+      return sendMessage(chatId, "/today /roadmap /progress /nclc /how /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/fr [an English thought] = say it in French · /codes · /exam YYYY-MM-DD · /log 25 min podcast · /skip · /next\nAny voice note = speaking feedback; any French text = writing feedback; an English question = tutor; an English statement about your day = I make you say it in French.");
     case "/placement": {
       await sendMessage(chatId, "Building your placement test…");
       const items = await checks.authorPlacement();
@@ -173,8 +179,16 @@ async function onCommand(chatId: number, text: string) {
       return;
     }
     case "/next": return (await advance(sendQueued)) ? undefined : sendMessage(chatId, "Nothing queued.");
+    case "/fr": {
+      if (args.length) return void (await challenge(chatId, args.join(" ")));
+      const t = await ask<{ en: string }>("EXAMINER",
+        `One everyday English sentence a security guard in Toronto would actually think or say today (≤12 words, present or near future, concrete). Return {"en"}`, { temperature: 0.9 });
+      return void (await challenge(chatId, String(t.en ?? "I start work at eight tonight.")));
+    }
+    case "/nclc":
+    case "/readiness": return sendReadiness(chatId);
     case "/exam": {
-      if (!args[0]) return sendMessage(chatId, `Exam date: ${l.exam_date ?? "not set"}. /exam 2027-05-15`);
+      if (!args[0]) { await sendReadiness(chatId); return sendMessage(chatId, `Set your exam date with /exam 2027-05-15${l.exam_date ? ` (currently ${l.exam_date})` : ""}.`); }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(args[0])) return sendMessage(chatId, "Use YYYY-MM-DD, e.g. /exam 2027-05-15");
       await sql`UPDATE learner SET exam_date = ${args[0]}::date WHERE id = 1`;
       return sendMessage(chatId, `Exam date set: ${args[0]}. FSRS intervals are now capped at that horizon.`);
@@ -216,6 +230,7 @@ async function onCallback(q: any) {
     return sendMessage(chatId, "That's the start. When you're walking:", [[{ text: "▶️ Continue the lesson", callback_data: "slot:patrol" }]]);
   }
   if (kind === "why") return explainLastMiss(chatId);
+  if (kind === "live" && a === "give") return void (await liveAnswer({ give: true }));
   if (kind === "drill" && a === "spot") return startSpotCheck(chatId, Number(b), c ? Number(c) : undefined);
   if (kind === "gram" && a === "test") return startGrammarTest(chatId, b, c ? Number(c) : undefined);
   if (kind === "interview" && a === "end") return finishInterview(chatId);

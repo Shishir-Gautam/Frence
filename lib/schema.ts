@@ -253,6 +253,23 @@ CREATE TABLE IF NOT EXISTS quiz_results (
 );
 CREATE INDEX IF NOT EXISTS ix_08_quiz_results ON quiz_results (skill, created_at DESC);
 
+-- Exam-readiness evidence, collected from day one so the TCF estimate is never bolted on at the end.
+-- One row per scored thing that maps onto a TCF component. \`exam_format\` = it was a real TCF-shaped
+-- item/task (listening/reading set, tcf_w*/tcf_s*, interview, mock), not a lesson exercise: readiness
+-- confidence is driven by how much of the evidence is exam-shaped, and mocks outrank everything.
+CREATE TABLE IF NOT EXISTS exam_evidence (
+  id            SERIAL PRIMARY KEY,
+  component     skill NOT NULL,               -- listening | reading | writing | speaking
+  source        TEXT NOT NULL,                -- quiz_item | submission | live | mock
+  source_id     INT,
+  exam_format   BOOLEAN NOT NULL DEFAULT FALSE,
+  item_clb      NUMERIC(4,2) NOT NULL,        -- item difficulty (receptive) or graded clb_sub (productive)
+  correct       BOOLEAN,                      -- receptive items only; NULL for a graded task
+  weight        NUMERIC(3,2) NOT NULL DEFAULT 1,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_11_exam_evidence ON exam_evidence (component, created_at DESC);
+
 -- Non-grammar recurring problems (pronunciation, lexis, register). Grammar goes to grammar_evidence.
 CREATE TABLE IF NOT EXISTS error_patterns (
   id              SERIAL PRIMARY KEY,
@@ -334,4 +351,26 @@ CREATE OR REPLACE VIEW v_fsrs_load AS
 
 CREATE OR REPLACE VIEW v_current_clb AS
   SELECT DISTINCT ON (skill) skill, clb, confidence, computed_at FROM skill_estimates ORDER BY skill, computed_at DESC;
+
+-- How much exam-shaped evidence backs each component (last 90 days). lib/nclc.ts turns this into
+-- "AI estimate" vs "test-backed" vs "mock-validated" so an estimate is never mistaken for a result.
+CREATE OR REPLACE VIEW v_exam_readiness AS
+  SELECT s.skill::text AS component,
+         COALESCE(e.items, 0)      AS items,
+         COALESCE(e.exam_items, 0) AS exam_items,
+         COALESCE(e.mock_items, 0) AS mock_items,
+         COALESCE(e.hi_items, 0)   AS hi_items,     -- evidence at CLB 6+ (where NCLC 7 is decided)
+         COALESCE(e.hi_correct, 0) AS hi_correct,
+         e.last_at
+  FROM (SELECT unnest(ARRAY['listening','reading','writing','speaking'])::skill AS skill) s
+  LEFT JOIN (
+    SELECT component,
+           COUNT(*)::int                                                        AS items,
+           COUNT(*) FILTER (WHERE exam_format)::int                             AS exam_items,
+           COUNT(*) FILTER (WHERE source = 'mock')::int                         AS mock_items,
+           COUNT(*) FILTER (WHERE item_clb >= 6)::int                           AS hi_items,
+           COUNT(*) FILTER (WHERE item_clb >= 6 AND correct IS NOT FALSE)::int  AS hi_correct,
+           MAX(created_at)                                                      AS last_at
+    FROM exam_evidence WHERE created_at > now() - interval '90 days' GROUP BY 1
+  ) e ON e.component = s.skill;
 `;
