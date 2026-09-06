@@ -53,6 +53,10 @@ scripts/smoke.ts          end-to-end test with Gemini + Telegram mocked (runs ag
    - Sundays 20:00 Toronto → `GET https://<app>.vercel.app/api/cron/weekly?key=<CRON_SECRET>`
 6. In Telegram: `/start` → `/placement` (12 items, sets your starting CLB) → `/today`.
 
+## The curriculum (beginner track)
+
+`content/curriculum/beginner.json` — 40 units in 3 stages (Survival & sounds → Daily life & the past → Telling & explaining), zero → CLB 4 at one unit a day. Vocabulary order follows corpus frequency (Lonsdale & Le Bras, *A Frequency Dictionary of French*: the first ~1,000 lemmas cover ~80% of everyday text), grammar order follows the CEFR reference inventories for French (Beacco et al., *Niveau A1 / A2 pour le français*) and the CLB 1–4 descriptors, pronunciation comes first (sound discrimination gates listening and memory), and themes are the learner's own life (self-reference effect). Each unit = one lesson: **learn** (goal, new words + audio, dialogue, what to notice) → **practice** (4 guided, unscored items) → **check** (5 scored items, 80% to pass). Cards, the car drill and the evening recall reuse only that unit's material. From unit 29 one exam-format listening/reading set a day; after unit 40 (or unit 28 + listening CLB 3) the evidence-driven planner takes over. `/roadmap` shows the map; the morning card shows `Unit n/40 · Stage · streak` and a 🔥 **Start (2 min)** button (the smallest first step: the new words and their audio), and the check-in names tomorrow's first step — getting started is the hard part, so the first action is always tiny and already chosen.
+
 ## A day (defaults in `learner.schedule`)
 
 | time | environment | what happens |

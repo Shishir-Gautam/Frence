@@ -45,7 +45,23 @@ export async function sendMorningCard(chatId: number, date: string, plan: Plan) 
   ];
   const learner = await getLearner();
   const hint = learner.placement_done ? "" : "\n\n⚠️ Do /placement first (10 min) so the plan matches your real level.";
-  await sendMessage(chatId, `☀️ <b>Plan du ${date}</b> — ~${total} min\n🎯 <i>${esc(plan.focus)}</i>\n\n${lines}\n\n${esc(plan.message_to_learner)}${hint}`, kb);
+  const head = await roadmapLine();
+  const lessonItem = plan.slots.flatMap((s) => s.items).find((i): i is Extract<PlanItem, { type: "unit" }> => i.type === "unit" && i.mode !== "replay");
+  if (lessonItem) kb.unshift([{ text: "🔥 Start (2 min): just the new words", callback_data: `start2:${lessonItem.unit_id}` }]);
+  await sendMessage(chatId, `☀️ <b>${date}</b> — ~${total} min\n${head}\n🎯 <i>${esc(plan.focus)}</i>\n\n${lines}\n\n${esc(plan.message_to_learner)}${hint}`, kb);
+}
+
+/** "Unit 3/40 · Stage 1 Survival & sounds · 🔥 4-day streak" */
+export async function roadmapLine(): Promise<string> {
+  const { CURRICULUM } = await import("./units.js");
+  const passed = await one`SELECT COUNT(*)::int AS n FROM resource_units WHERE resource_id IN ('assimil','coach_lessons') AND status IN ('passed','mastered')`;
+  const n = Number(passed?.n ?? 0);
+  const unit = CURRICULUM.units[Math.min(n, CURRICULUM.units.length - 1)];
+  const st = CURRICULUM.stages.find((x) => x.id === unit.stage);
+  const days = await sql`SELECT DISTINCT log_date::text AS d FROM activity_log WHERE verified AND log_date >= CURRENT_DATE - 60`;
+  const set = new Set(days.map((r) => r.d)); let streak = 0;
+  for (let i = 0; i < 60; i++) { const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10); if (set.has(d)) streak++; else if (i > 0) break; }
+  return `🗺 Unit ${Math.min(n + 1, CURRICULUM.units.length)}/${CURRICULUM.units.length} · Stage ${unit.stage} ${st?.name ?? ""}${streak ? ` · 🔥 ${streak}-day streak` : ""}`;
 }
 
 /** Deliver a slot one item at a time; the next item is sent when the current one completes (or ⏭ Next item). */
@@ -115,8 +131,13 @@ export async function sendCheckin(chatId: number, date: string) {
   const completed = d.filter((x) => x.status === "completed").length, sent = d.filter((x) => ["sent", "completed"].includes(x.status)).length;
   const aw = await kvGet<any>("awaiting");
   if (!aw || aw.kind === "checkin") await kvSet("awaiting", { kind: "checkin", date }, 120);   // never clobber a pending writing/speaking task
+  const { CURRICULUM } = await import("./units.js");
+  const passed = Number((await one`SELECT COUNT(*)::int AS n FROM resource_units WHERE resource_id IN ('assimil','coach_lessons') AND status IN ('passed','mastered')`)?.n ?? 0);
+  const next = CURRICULUM.units[Math.min(passed, CURRICULUM.units.length - 1)];
   await sendMessage(chatId,
-    `🌙 <b>Check-in</b> — <b>${m?.verified ?? 0} min verified</b> (${m?.mins ?? 0} logged) · ${completed}/${sent} slots completed.\nExtra time to report (a podcast in the car)? Use <code>/log 25 min podcast driving</code> — it's logged as reported, not verified.\n<i>Tomorrow's plan lands at 06:30.</i>`,
+    `🌙 <b>Check-in</b> — <b>${m?.verified ?? 0} min verified</b> (${m?.mins ?? 0} logged) · ${completed}/${sent} slots completed.\n` +
+    `Tomorrow's first step (2 min): <i>${esc(next.first_step)}</i>\n` +
+    `<i>Extra time to report? /log 25 min podcast driving. The plan lands at 06:30.</i>`,
     [[{ text: "😴 Done for today", callback_data: "checkin:done" }]]);
 }
 

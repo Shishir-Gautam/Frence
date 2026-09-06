@@ -12,8 +12,9 @@ export async function stage(): Promise<Stage> {
   const clb = await currentClb();
   const passed = await one`SELECT COUNT(*)::int AS n FROM resource_units WHERE status IN ('passed','mastered') AND resource_id IN ('assimil','coach_lessons')`;
   if (learner.settings?.stage === "core") return "core";
-  if (clb.listening.clb >= 3 && clb.listening.confidence >= 0.4 && Number(passed?.n ?? 0) >= 8) return "core";
-  if (Number(passed?.n ?? 0) >= 25) return "core";
+  const n = Number(passed?.n ?? 0);
+  if (n >= 40) return "core";                                                    // curriculum finished
+  if (n >= 28 && clb.listening.clb >= 3 && clb.listening.confidence >= 0.4) return "core";   // stage 3 + real listening evidence
   return "beginner";
 }
 
@@ -52,4 +53,4 @@ export const INTRO = `🌱 <b>How this works</b>
 2. Cards arrive 3× a day: type the French. They only contain words from your lessons.
 3. In the car: the lesson's lines as prompt → pause → answer. Say it out loud. A 5-question spot check comes later.
 4. Evening: recall yesterday's lesson from English.
-Every wrong answer has a ❓ Why? button. No commands needed. If something is stuck, /skip. Progress: /progress.`;
+Every wrong answer has a ❓ Why? button. Each morning has a 🔥 Start (2 min) button — the smallest possible first step. No commands needed. /roadmap shows the 40-unit map; /progress your position.`;

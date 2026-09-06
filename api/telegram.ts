@@ -104,8 +104,18 @@ async function onCommand(chatId: number, text: string) {
     }
     case "/zero": { await startFromZero(); await sendMessage(chatId, INTRO); const { date, plan } = await rebuildToday(); return sendMorningCard(chatId, date, plan); }
     case "/how": return sendMessage(chatId, INTRO);
+    case "/roadmap": {
+      const { CURRICULUM } = await import("../lib/units.js");
+      const { roadmapLine } = await import("../lib/deliver.js");
+      const passed = Number((await one`SELECT COUNT(*)::int AS n FROM resource_units WHERE resource_id IN ('assimil','coach_lessons') AND status IN ('passed','mastered')`)?.n ?? 0);
+      const rows = CURRICULUM.units.map((u) => `${u.n <= passed ? "✅" : u.n === passed + 1 ? "▶️" : "▫️"} ${u.n}. ${esc(u.title)} <i>— ${esc(u.can_do)}</i>`);
+      const stages = CURRICULUM.stages.map((st) => `<b>Stage ${st.id} — ${esc(st.name)}</b> (units ${st.units}, CLB ${st.clb})`).join("\n");
+      const { splitTelegram } = await import("../lib/text.js");
+      for (const c of splitTelegram(`🗺 <b>Roadmap — zero → CLB 4 in 40 lessons, then the exam planner</b>\n${stages}\n\n${rows.join("\n")}`)) await sendMessage(chatId, c);
+      return;
+    }
     case "/help":
-      return sendMessage(chatId, "/today /replan /progress /placement /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/codes (grammar codes) · /exam YYYY-MM-DD · /log 25 min podcast · /skip (abandon current item) · /next\nAny voice note = speaking feedback; any French text = writing feedback; English question = tutor.");
+      return sendMessage(chatId, "/today /roadmap /progress /how /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/codes (grammar codes) · /exam YYYY-MM-DD · /log 25 min podcast · /skip (abandon current item) · /next\nAny voice note = speaking feedback; any French text = writing feedback; English question = tutor.");
     case "/placement": {
       await sendMessage(chatId, "Building your placement test…");
       const items = await checks.authorPlacement();
@@ -198,6 +208,13 @@ async function onCallback(q: any) {
     if (a === "notes") return sendNotes(chatId, Number(b));
   }
   if (kind === "prac" && a === "show") return practiceAnswer(undefined, true);
+  if (kind === "start2") {
+    const u = await one`SELECT * FROM resource_units WHERE id = ${Number(a)}`;
+    if (!u) return;
+    const { teachIntro } = await import("../lib/teach.js");
+    await teachIntro(chatId, u);
+    return sendMessage(chatId, "That's the start. When you're walking:", [[{ text: "▶️ Continue the lesson", callback_data: "slot:patrol" }]]);
+  }
   if (kind === "why") return explainLastMiss(chatId);
   if (kind === "drill" && a === "spot") return startSpotCheck(chatId, Number(b), c ? Number(c) : undefined);
   if (kind === "gram" && a === "test") return startGrammarTest(chatId, b, c ? Number(c) : undefined);

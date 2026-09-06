@@ -123,6 +123,7 @@ async function beginnerPlan(date: string, nightly: boolean): Promise<{ date: str
   if (passedN >= 5 && codes.length) seated.push({ type: "grammar_brief", competency_code: codes[0] });
   if (passedN >= 2) seated.push({ type: "writing", task: "micro" });
   if (passedN >= 2) seated.push({ type: "speaking", task: "micro" });
+  if (passedN >= 28) seated.push(passedN % 2 ? { type: "listening_set" } : { type: "reading_set" });   // stage 3: first exam-format items, one a day
   // 2-hour day: a second patrol block replays the previous two lessons for shadowing (the most reliable beginner
   // pronunciation/rhythm work), the drill is longer, cards are more. Set learner.settings.target_minutes (default 150).
   const target = Number((await getLearner()).settings?.target_minutes ?? 150);
@@ -132,8 +133,8 @@ async function beginnerPlan(date: string, nightly: boolean): Promise<{ date: str
     focus: `Beginner track — lesson ${lesson.seq}${lesson.status === "attempted" ? " (retest)" : ""}: ${lesson.title ?? ""}`,
     rationale: "Fixed beginner syllabus: no evidence yet, so no evidence-driven planning. Everything is drawn from lessons already met.",
     message_to_learner: passedN === 0
-      ? "Day one: listen to the lesson twice while walking, read along, repeat out loud. Then tap Check — five short questions, all from the lesson. That's the whole job today."
-      : `${passedN} lesson${passedN > 1 ? "s" : ""} passed. Today: lesson ${lesson.seq} on patrol, the same lines as a drill in the car, and a short recall of lesson ${prev?.seq ?? "—"} tonight.`,
+      ? `Day one. Smallest possible start: tap 🔥 Start — the new words and their audio, two minutes. The rest of the lesson follows when you're walking. First step: ${lesson.payload?.first_step ?? "say bonjour out loud."}`
+      : `${passedN} lesson${passedN > 1 ? "s" : ""} passed. Today: lesson ${lesson.seq} (${lesson.payload?.goal ?? lesson.title ?? ""}) on patrol, its lines as a drill in the car, recall of lesson ${prev?.seq ?? "—"} tonight. First step: ${lesson.payload?.first_step ?? "the new words."}`,
     slots: [
       { environment: "patrol", slot: "patrol", minutes: 25, items: [{ type: "unit", resource_id: lesson.resource_id, unit_id: Number(lesson.id), title: lesson.title, mode: "study" }] },
       ...(patrol2.length ? [{ environment: "patrol" as const, slot: "patrol", minutes: 15, items: patrol2 }] : []),

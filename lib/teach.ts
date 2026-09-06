@@ -37,14 +37,11 @@ Return {"goal","vocab","notes","practice"}`, { temperature: 0.3 });
   return merged;
 }
 
-/** 1. TEACH */
-export async function teach(chatId: number, u: any, env: string) {
+/** 1a. The two-minute start: goal + new words + their audio. Enough to begin without deciding anything. */
+export async function teachIntro(chatId: number, u: any) {
   const p = await enrichLesson(u);
-  const d = p.dialogue ?? [];
   const isAssimil = u.resource_id === "assimil";
   await sendMessage(chatId, `📖 <b>${isAssimil ? "Assimil" : "Leçon"} ${u.seq} — ${esc(u.title ?? "")}</b>\n🎯 ${esc(p.goal ?? "")}\n\n<i>Three steps: learn → practice (not scored) → check (scored). ~20 min.</i>`);
-
-  // new words + audio
   if (p.vocab?.length) {
     await sendMessage(chatId, `🔤 <b>New words</b>\n${p.vocab.map((v) => `• <b>${esc(v.fr)}</b> — ${esc(v.en)}${v.tip ? `  <i>(${esc(v.tip)})</i>` : ""}`).join("\n")}`);
     await sendChatAction(chatId, "record_voice");
@@ -54,6 +51,15 @@ export async function teach(chatId: number, u: any, env: string) {
       await sql`UPDATE resource_units SET payload = payload || ${json({ audio_vocab: id })}::jsonb WHERE id = ${u.id}`;
     }
   }
+  await kvSet("intro_sent:" + u.id, { at: Date.now() }, 12 * 60);
+}
+
+/** 1. TEACH */
+export async function teach(chatId: number, u: any, env: string) {
+  const p = await enrichLesson(u);
+  const d = p.dialogue ?? [];
+  if (!(await kvGet("intro_sent:" + u.id))) await teachIntro(chatId, u);
+  else await sendMessage(chatId, `▶️ <b>Leçon ${u.seq}</b> — continuing.`);
 
   // dialogue + audio
   const body = d.map((l, i) => `${i + 1}. ${esc(l.fr)}\n    <i>${esc(l.en)}</i>`).join("\n");

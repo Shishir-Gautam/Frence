@@ -22,33 +22,20 @@ export async function nextUnit(resourceId: string) {
   return undefined;
 }
 
-// Survival ladder for bot-authored beginner lessons (when Assimil isn't loaded or the learner is below CLB 3).
-const LADDER: { theme: string; codes: string[] }[] = [
-  { theme: "Se présenter : bonjour, je m'appelle, je suis de…, j'habite à Toronto, je suis gardien de sécurité", codes: ["TNS_PRESENT_IRREG", "PRO_SUJET_TONIQUE"] },
-  { theme: "Les nombres 0-20, l'heure, les jours de la semaine, « il est huit heures »", codes: ["DET_ARTICLES"] },
-  { theme: "Le travail et la routine : je travaille, je commence à 7 h, je finis à 15 h, je fais une ronde", codes: ["TNS_PRESENT_REG"] },
-  { theme: "Poser des questions : est-ce que, où, quand, combien, à quelle heure ; demander de répéter / parler lentement", codes: ["INT_TROIS_FORMES", "INT_MOTS_INTERROGATIFS"] },
-  { theme: "Au café / au magasin : je voudrais, ça coûte combien, un café, une baguette, du pain, de l'eau", codes: ["DET_PARTITIF_QUANTITE", "MOOD_COND_PRES"] },
-  { theme: "La famille et les amis : mon frère, ma sœur, mes parents ; avoir + âge", codes: ["DET_POSSESSIFS_DEMONSTRATIFS", "AGR_ADJ_GENRE_NOMBRE"] },
-  { theme: "La ville et les transports : le métro, prendre le bus, aller à / au / en, tourner à gauche", codes: ["SYN_PREPOSITIONS_LIEU_TEMPS", "TNS_PRESENT_IRREG"] },
-  { theme: "La négation : je ne comprends pas, je n'ai pas de voiture, je ne parle pas encore bien français", codes: ["NEG_BASE"] },
-  { theme: "Les projets : ce week-end je vais…, demain, la semaine prochaine (futur proche)", codes: ["TNS_FUTUR_PROCHE"] },
-  { theme: "Raconter sa journée d'hier : j'ai travaillé, je suis rentré, j'ai mangé (passé composé)", codes: ["TNS_PASSE_COMP"] },
-  { theme: "Se lever, se coucher, s'appeler : les verbes pronominaux au présent", codes: ["TNS_PRONOMINAL"] },
-  { theme: "Décrire son appartement et son quartier : grand, petit, bruyant, il y a…", codes: ["AGR_ADJ_GENRE_NOMBRE", "DET_ARTICLES"] },
-  { theme: "Chez le médecin / à la pharmacie : j'ai mal à…, je suis fatigué, un rendez-vous", codes: ["DET_ARTICLES", "TNS_PRESENT_IRREG"] },
-  { theme: "Au téléphone et par courriel : laisser un message, épeler son nom, donner son numéro", codes: ["MOOD_IMPERATIF", "INT_MOTS_INTERROGATIFS"] },
-  { theme: "Le temps qu'il fait, les saisons, depuis + présent (j'habite au Canada depuis deux ans)", codes: ["TNS_INDICATEURS_TEMPS"] },
-  { theme: "Comparer : plus… que, moins… que, le meilleur ; le Canada et le Népal", codes: ["SYN_COMPARATIF_SUPERLATIF"] },
-];
+// The beginner curriculum (content/curriculum/beginner.json) drives bot-authored lessons: one unit = one lesson.
+import curriculum from "../content/curriculum/beginner.json" with { type: "json" };
+export const CURRICULUM = curriculum as { stages: { id: number; name: string; units: string; clb: string; focus: string }[]; units: { n: number; stage: number; title: string; can_do: string; codes: string[]; vocab: string[]; pron: string; first_step: string }[] };
+export const unitSpec = (n: number) => CURRICULUM.units[Math.min(n, CURRICULUM.units.length) - 1];
 
 export async function authorCoachLesson() {
   // self-heal: the toolbox row may be missing on a database seeded before coach_lessons existed
   if (!(await one`SELECT 1 FROM resources WHERE id = 'coach_lessons'`)) { const { seedToolbox } = await import("./seed.js"); await seedToolbox(); }
   const last = await one`SELECT COALESCE(MAX(seq),0) AS s FROM resource_units WHERE resource_id = 'coach_lessons'`;
   const seq = Number(last?.s ?? 0) + 1;
-  const step = LADDER[(seq - 1) % LADDER.length];
-  const clb = seq <= 6 ? 1 : seq <= 12 ? 2 : 3;
+  if (seq > CURRICULUM.units.length) return undefined;           // curriculum finished → the core planner takes over
+  const spec = unitSpec(seq);
+  const step = { theme: `${spec.title} — ${spec.can_do} Required vocabulary to teach (use every item): ${spec.vocab.join(", ")}. Pronunciation focus: ${spec.pron}.`, codes: spec.codes };
+  const clb = spec.stage === 1 ? 1 : spec.stage === 2 ? 2 : 3;
   const known = await knownMaterial();
   const r = await ask<{ title: string; goal: string; vocab: { fr: string; en: string; tip: string }[]; dialogue: { fr: string; en: string }[]; notes: string; practice: { prompt_en: string; hint: string; answer_fr: string; accept: string[]; why: string }[]; exercises: { fr: string; en: string }[] }>("EXAMINER",
     `Write beginner lesson ${seq} for an absolute-beginner learner (CLB ${clb}) in the style of an Assimil lesson. Theme: ${step.theme}. Grammar codes to seed: ${step.codes.join(", ")}.
@@ -62,7 +49,7 @@ Return JSON with:
 - practice: 4 guided items {prompt_en, hint, answer_fr, accept[], why(≤15 words)} reusing only dialogue words; item 4 recombines two lines
 - exercises: 4 EN→FR sentences {fr, en} that recombine the lesson's words`, { temperature: 0.6 });
   const ins = await sql`INSERT INTO resource_units (resource_id, seq, title, clb_level, skills, payload)
-    VALUES ('coach_lessons', ${seq}, ${String(r.title ?? `Leçon ${seq}`)}, ${clb}, ${["listening", "reading"]}, ${json({ goal: r.goal, vocab: r.vocab, dialogue: r.dialogue, notes: r.notes, practice: r.practice, exercises: r.exercises, codes: step.codes })}::jsonb) RETURNING *`;
+    VALUES ('coach_lessons', ${seq}, ${String(spec.title)}, ${clb}, ${["listening", "reading"]}, ${json({ goal: r.goal ?? spec.can_do, vocab: r.vocab, dialogue: r.dialogue, notes: r.notes, practice: r.practice, exercises: r.exercises, codes: step.codes, first_step: spec.first_step, stage: spec.stage })}::jsonb) RETURNING *`;
   return ins[0];
 }
 
