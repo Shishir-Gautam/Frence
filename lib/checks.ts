@@ -166,14 +166,21 @@ async function finish(s: CheckSession): Promise<void> {
       await sql`UPDATE learner SET placement_done = TRUE WHERE id = 1`;
       const { placementEstimate } = await import("./progress.js");
       tail = await placementEstimate(s.items);
+      s.meta = { ...(s.meta ?? {}), rebuild_plan: true };
       break;
     }
     default: tail = "";
   }
   await logActivity(date, s.env, s.type, mins, true, s.ref);
   await sendMessage(s.chatId, `${passed ? "✅" : "🔁"} <b>${esc(s.title)}: ${ok}/${n} (${pct}%)</b> · ${mins} min\n${esc(tail)}${added ? `\n🃏 ${added} cards added from misses.` : ""}`);
-  const { onItemDone } = await import("./deliver.js");
+  const { onItemDone, sendMorningCard } = await import("./deliver.js");
   await onItemDone(s.type);
+  if (s.meta?.rebuild_plan) {   // the level just changed: today's plan is stale, rebuild it now
+    const { rebuildToday } = await import("./planner.js");
+    const { date, plan } = await rebuildToday();
+    await sendMessage(s.chatId, "📋 Your level is set — here is today, rebuilt for it:");
+    await sendMorningCard(s.chatId, date, plan);
+  }
 }
 
 // ------------------------------------------------------------------ authors

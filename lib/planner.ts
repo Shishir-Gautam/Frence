@@ -35,6 +35,14 @@ const CONTRACT = `Return JSON:
 Item types: {"type":"unit","resource_id","unit_id","title","mode":"study|replay|active"} — unit_id and title MUST come from NEXT UNITS; {"type":"drill","method":"pimsleur|michel_thomas|language_transfer","competency_codes":[1-2 codes],"minutes":15-25}; {"type":"grammar_brief","competency_code"} — codes MUST come from TEACHABLE; {"type":"listening_set"}; {"type":"reading_set"}; {"type":"writing","task":"micro|tcf_w1|tcf_w2|tcf_w3"}; {"type":"speaking","task":"micro|tcf_s1|tcf_s2|tcf_s3"}; {"type":"interview","task":"tcf_s1|tcf_s3"}; {"type":"surprise_test"} (Sundays only).
 Rules: total 120-180 min. Daily: one drill, one graded production item (writing/speaking/interview), and on patrol the next lesson unit: assimil if loaded, otherwise coach_lessons (the beginner ladder). ABSOLUTE-BEGINNER GATE: listening_set / reading_set only when that skill's CLB ≥ 3 (below that, exam-style MCQ in French is noise — use lesson units instead); tcf_* tasks only when that skill's CLB ≥ 4, else micro; interview only when speaking CLB ≥ 4. If placement is not done, keep the day light and say in message_to_learner to run /placement. Podcasts only inside their CLB band and cadence. Grammar: at most 2 competencies/day, from TEACHABLE, and the same codes should drive the drill. If fsrs_load.due_now > 40: add a second micro srs entry and say so. Sunday: lighter, plus surprise_test in seated. A unit with status 'attempted' must be retested (mode study) before a new one.`;
 
+/** Rebuild today's plan (after placement / from-zero), dropping the stale one first. */
+export async function rebuildToday() {
+  const learner = await getLearner();
+  const today = localDate(learner.tz);
+  await sql`DELETE FROM deliveries WHERE plan_date = ${today} AND status = 'pending'`;
+  return buildPlan(today);
+}
+
 export async function buildPlan(forDate?: string): Promise<{ date: string; plan: Plan }> {
   const learner = await getLearner();
   const date = forDate ?? localDate(learner.tz, 1);

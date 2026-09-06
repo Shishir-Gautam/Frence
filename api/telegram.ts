@@ -16,7 +16,7 @@ import { sendProgress } from "../lib/progress.js";
 import { teachable } from "../lib/grammar.js";
 import { tutor, ask, COMPETENCIES, pingModels, isQuotaExhausted, quotaPaused } from "../lib/coach.js";
 import { localDate } from "../lib/time.js";
-import { startFromZero } from "../lib/stage.js";
+import { startFromZero, stage } from "../lib/stage.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(200).send("ok");
@@ -106,8 +106,9 @@ async function onCommand(chatId: number, text: string) {
       return checks.startCheck({ chatId, type: "placement", title: "Placement", items, env: "seated", pass_pct: 0 });
     }
     case "/today": {
-      const p = await one`SELECT plan FROM plans WHERE plan_date = ${today}`;
-      if (p) return sendMorningCard(chatId, today, p.plan);
+      const p = await one`SELECT plan, inputs_digest FROM plans WHERE plan_date = ${today}`;
+      const st = await stage();
+      if (p && (st !== "beginner" || p.inputs_digest?.stage === "beginner")) return sendMorningCard(chatId, today, p.plan);   // stale pre-beginner-track plan → rebuild
       await sendMessage(chatId, "No plan yet — building one (≈30 s)…");
       const { plan } = await buildPlan(today);
       return sendMorningCard(chatId, today, plan);
