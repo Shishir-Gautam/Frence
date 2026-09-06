@@ -102,8 +102,12 @@ export async function answer(input: { text?: string; mcq?: number; pos?: number;
     await sendMessage(s.chatId, v === "exact" ? `✅ <b>${esc(it.expected ?? "")}</b>` : v === "close" ? `🟡 Almost — <b>${esc(it.expected ?? "")}</b>` : `❌ → <b>${esc(it.expected ?? "")}</b>`);
   } else return false;
 
+  // optimistic lock: if another handler advanced the session meanwhile (duplicate delivery), drop this one
+  const latest = await kvGet<CheckSession>("check_session");
+  if (!latest || latest.pos !== s.pos) return true;
   Object.assign(it, { given, correct, verdict });
   s.pos++;
+  await kvSet("check_session", s, 180);
   if (s.pos < s.items.length) { await sendItem(s); return true; }
   await finish(s);
   return true;

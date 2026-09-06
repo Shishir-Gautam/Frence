@@ -14,7 +14,7 @@ import { sendMorningCard, sendSlot, sendQueued } from "../lib/deliver.js";
 import { advance, clearAll, queueInfo } from "../lib/flow.js";
 import { sendProgress } from "../lib/progress.js";
 import { teachable } from "../lib/grammar.js";
-import { tutor, ask, COMPETENCIES, pingModels } from "../lib/coach.js";
+import { tutor, ask, COMPETENCIES, pingModels, isQuotaExhausted } from "../lib/coach.js";
 import { localDate } from "../lib/time.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -22,10 +22,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (secret && req.headers["x-telegram-bot-api-secret-token"] !== secret) return res.status(401).send("bad secret");
   res.status(200).send("ok");
-  waitUntil(route(req.body).catch(async (e: any) => {
+  waitUntil((async () => {
+    // Telegram re-delivers updates it thinks were lost; process each update_id once.
+    const uid = Number(req.body?.update_id);
+    if (uid) {
+      const seen = await sql`INSERT INTO kv (k, v, expires_at) VALUES (${"upd:" + uid}, '1'::jsonb, now() + interval '1 day') ON CONFLICT (k) DO NOTHING RETURNING k`;
+      if (!seen.length) return;
+    }
+    await route(req.body);
+  })().catch(async (e: any) => {
     console.error(e);
     const l = await getLearner().catch(() => null);
-    if (l?.chat_id) await sendMessage(l.chat_id, `⚠️ ${esc(String(e.message ?? e)).slice(0, 300)}`).catch(() => {});
+    const msg = String(e?.message ?? e);
+    const friendly = isQuotaExhausted(e)
+      ? "⚠️ Gemini's daily free-tier quota is used up for this key — it resets at midnight Pacific (03:00 Toronto). Enabling billing on the key removes the cap (this bot costs a few cents a day)."
+      : /503|high demand|UNAVAILABLE/i.test(msg) ? "⚠️ Gemini is overloaded on every model in the chain right now — try again in a minute."
+      : `⚠️ ${esc(msg).slice(0, 300)}`;
+    if (l?.chat_id) await sendMessage(l.chat_id, friendly).catch(() => {});
   }));
 }
 

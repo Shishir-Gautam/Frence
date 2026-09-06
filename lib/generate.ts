@@ -35,6 +35,9 @@ Return {"title","text","items":[...]}`, { temperature: 0.5 });
   await startCheck({ chatId, type: "reading_set", title: set.title, items: sanitize(set.items).map((i) => ({ ...i, skill: "reading" })), env, pass_pct: 75, meta: { delivery_id: deliveryId } });
 }
 
+/** Model "helpers" come back as strings or {fr,en} objects; render both. */
+const helperLine = (h: any) => esc(typeof h === "string" ? h : h && typeof h === "object" ? [h.fr ?? h.expression ?? h.text, h.en ?? h.gloss ?? h.meaning].filter(Boolean).join(" — ") : String(h ?? ""));
+
 export type WritingTask = "micro" | "tcf_w1" | "tcf_w2" | "tcf_w3";
 export type SpeakingTask = "micro" | "tcf_s1" | "tcf_s2" | "tcf_s3";
 
@@ -60,7 +63,7 @@ Return {"prompt_fr","instructions_en" (word count, time, what graders look for),
   const ins = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('writing', ${task}, 'seated', ${String(p.prompt_fr)}) RETURNING id`;
   await kvSet("awaiting", { kind: "writing", submission_id: Number(ins[0].id), task, delivery_id: deliveryId }, 12 * 60);
   await sendMessage(chatId,
-    `✍️ <b>Expression écrite — ${task === "micro" ? "micro" : "TCF " + task.slice(4).toUpperCase()}</b>\n\n${esc(p.prompt_fr)}\n\n<i>${esc(p.instructions_en ?? "")}</i>\n\n💡 ${(p.helpers ?? []).map((h) => esc(String(h))).join(" · ")}\n\nReply with your text. Graded against the TCF rubric with a CLB sub-score.`,
+    `✍️ <b>Expression écrite — ${task === "micro" ? "micro" : "TCF " + task.slice(4).toUpperCase()}</b>\n\n${esc(p.prompt_fr)}\n\n<i>${esc(p.instructions_en ?? "")}</i>\n\n💡 ${(p.helpers ?? []).map(helperLine).join(" · ")}\n\nReply with your text. Graded against the TCF rubric with a CLB sub-score.`,
     [[{ text: "⏭ Skip", callback_data: "skip:writing" }]]);
 }
 
@@ -72,7 +75,7 @@ export async function sendSpeakingTask(chatId: number, task: SpeakingTask = "mic
   const ins = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('speaking', ${task}, 'seated', ${String(p.prompt_fr)}) RETURNING id`;
   await kvSet("awaiting", { kind: "speaking", submission_id: Number(ins[0].id), task, delivery_id: deliveryId }, 12 * 60);
   await sendMessage(chatId,
-    `🎤 <b>Expression orale — ${task === "micro" ? "micro" : "TCF " + task.slice(4).toUpperCase()}</b>\n\n${esc(p.prompt_fr)}\n\n<i>${esc(p.instructions_en ?? "")}</i>\n\n💡 ${(p.helpers ?? []).map((h) => esc(String(h))).join(" · ")}\n\n🎙 Reply with a voice message.`,
+    `🎤 <b>Expression orale — ${task === "micro" ? "micro" : "TCF " + task.slice(4).toUpperCase()}</b>\n\n${esc(p.prompt_fr)}\n\n<i>${esc(p.instructions_en ?? "")}</i>\n\n💡 ${(p.helpers ?? []).map(helperLine).join(" · ")}\n\n🎙 Reply with a voice message.`,
     [[{ text: "⏭ Skip", callback_data: "skip:speaking" }]]);
 }
 

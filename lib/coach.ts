@@ -10,10 +10,13 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 // Model chain: primary from env, then fallbacks. A 503 "high demand" / 429 on one model moves to the next.
 const list = (v: string | undefined, dflt: string[]) => (v ? v.split(",").map((x) => x.trim()).filter(Boolean) : dflt);
-export const TEXT_MODELS = list(process.env.GEMINI_MODEL, ["gemini-3.8-flash"]).concat(list(process.env.GEMINI_FALLBACK_MODELS, ["gemini-3.7-flash", "gemini-3.5-flash"]));
+// gemini-2.5-flash is closed to new users (404) — never put it in the text chain.
+export const TEXT_MODELS = [...new Set(list(process.env.GEMINI_MODEL, ["gemini-3.8-flash"]).concat(list(process.env.GEMINI_FALLBACK_MODELS, ["gemini-3.7-flash", "gemini-3.6-flash"])))].filter((m) => !/^gemini-2\./.test(m));
 export const TTS_MODELS = list(process.env.GEMINI_TTS_MODEL, ["gemini-3.1-flash-tts-preview"]).concat(list(process.env.GEMINI_TTS_FALLBACK_MODELS, ["gemini-2.5-flash-preview-tts"]));
 
-const transient = (e: any) => /\b(503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand)\b/i.test(String(e?.message ?? e));
+const transient = (e: any) => /\b(503|429|404|UNAVAILABLE|RESOURCE_EXHAUSTED|NOT_FOUND|overloaded|high demand)\b/i.test(String(e?.message ?? e));
+/** Daily free-tier quota gone (as opposed to a per-minute spike): no point retrying other models for a while. */
+export const isQuotaExhausted = (e: any) => /exceeded your current quota|RESOURCE_EXHAUSTED.*quota|check your plan and billing/i.test(String(e?.message ?? e));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Try each model in order; on a transient error retry once after a short backoff, then move on. */
@@ -24,6 +27,7 @@ export async function withModels<T>(models: string[], fn: (model: string) => Pro
       try { return await fn(m); }
       catch (e: any) {
         last = e;
+        if (isQuotaExhausted(e)) throw e;
         if (!transient(e)) throw e;
         console.warn(`gemini ${m} transient (${attempt + 1}/2): ${String(e?.message ?? e).slice(0, 120)}`);
         if (attempt === 0) await sleep(1500);

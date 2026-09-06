@@ -113,12 +113,11 @@ function validate(plan: Plan, next: any[], teach: any[], clb: Record<string, { c
       return [it];
     });
   }
-  // a beginner patrol slot with nothing left gets the next lesson unit
-  const patrol = plan.slots.find((s) => s.environment === "patrol");
-  if (patrol && !patrol.items.length) {
-    const u = next.find((n) => n.resource_id === "assimil") ?? next.find((n) => n.resource_id === "coach_lessons");
-    if (u) patrol.items.push({ type: "unit", resource_id: u.resource_id, unit_id: u.unit_id, title: u.title, mode: "study" });
-  }
+  // the patrol slot must carry a lesson unit when one is available (the planner sometimes drops it)
+  const lesson = next.find((n) => n.resource_id === "assimil") ?? next.find((n) => n.resource_id === "coach_lessons");
+  let patrol = plan.slots.find((s) => s.environment === "patrol");
+  if (!patrol && lesson) { patrol = { environment: "patrol", slot: "patrol", minutes: 30, items: [] }; plan.slots.unshift(patrol); }
+  if (patrol && lesson && !patrol.items.some((i) => i.type === "unit")) patrol.items.unshift({ type: "unit", resource_id: lesson.resource_id, unit_id: lesson.unit_id, title: lesson.title, mode: "study" });
   for (const s of plan.slots) {
     if (s.time && !/^\d{2}:\d{2}$/.test(s.time)) delete s.time;
     s.minutes = Math.max(5, Number(s.minutes) || 20);
