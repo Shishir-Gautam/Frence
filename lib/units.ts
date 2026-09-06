@@ -42,6 +42,8 @@ const LADDER: { theme: string; codes: string[] }[] = [
 ];
 
 export async function authorCoachLesson() {
+  // self-heal: the toolbox row may be missing on a database seeded before coach_lessons existed
+  if (!(await one`SELECT 1 FROM resources WHERE id = 'coach_lessons'`)) { const { seedToolbox } = await import("./seed.js"); await seedToolbox(); }
   const last = await one`SELECT COALESCE(MAX(seq),0) AS s FROM resource_units WHERE resource_id = 'coach_lessons'`;
   const seq = Number(last?.s ?? 0) + 1;
   const step = LADDER[(seq - 1) % LADDER.length];

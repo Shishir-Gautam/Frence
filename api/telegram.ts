@@ -92,11 +92,14 @@ async function onCommand(chatId: number, text: string) {
   const l = await getLearner();
   const today = localDate(l.tz);
   switch (c) {
-    case "/start":
-      if (l.placement_done) return sendMessage(chatId, `👋 Salut ! /today shows the plan; everything else arrives on its own.`);
+    case "/start": {
+      const passed = await one`SELECT COUNT(*)::int AS n FROM resource_units WHERE status IN ('passed','mastered')`;
+      if (l.placement_done && Number(passed?.n ?? 0) > 0) return sendMessage(chatId, `👋 Salut ! /today shows the plan; everything else arrives on its own.`);
+      if (l.placement_done) return sendMessage(chatId, `👋 Salut ! Level is set. Start from zero anyway (fixed beginner lessons, no test)?`, [[{ text: "🌱 Yes — from zero", callback_data: "zero:yes" }], [{ text: "📋 No, show today", callback_data: "slot:today" }]]);
       return sendMessage(chatId, `👋 Salut ! I'm your TCF Canada coach.\n\nWhere are you starting from?`, [
         [{ text: "🌱 From zero — no test, start lesson 1", callback_data: "zero:yes" }],
         [{ text: "🧪 I know some French — placement test (10 min)", callback_data: "zero:placement" }]]);
+    }
     case "/zero": await startFromZero(); return sendMessage(chatId, "🌱 Beginner track set. /today for your first lesson.");
     case "/help":
       return sendMessage(chatId, "/today /replan /progress /placement /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/codes (grammar codes) · /exam YYYY-MM-DD · /log 25 min podcast · /skip (abandon current item) · /next\nAny voice note = speaking feedback; any French text = writing feedback; English question = tutor.");
@@ -204,6 +207,7 @@ async function onCallback(q: any) {
     return;
   }
   if (kind === "checkin" && a === "done") { await kvDel("awaiting"); return editMessage(chatId, mid, "🌙 Bonne nuit."); }
+  if (kind === "slot" && a === "today") return onCommand(chatId, "/today");
   if (kind === "slot") {
     const date = localDate(l.tz);
     if (a === "srs") return srs.startSession(chatId, 15, "micro");
