@@ -9,7 +9,7 @@ import { sendUnit, sendNotes, startUnitCheck, nextUnit } from "../lib/units.js";
 import { sendDrill, startSpotCheck, authorDrill } from "../lib/drills.js";
 import { sendListeningSet, sendReadingSet, sendWritingTask, sendSpeakingTask, startInterview, sendGrammarBrief, startGrammarTest } from "../lib/generate.js";
 import { gradeWriting, gradeSpeaking, finishInterview } from "../lib/grade.js";
-import { buildPlan } from "../lib/planner.js";
+import { buildPlan, rebuildToday } from "../lib/planner.js";
 import { sendMorningCard, sendSlot, sendQueued } from "../lib/deliver.js";
 import { advance, clearAll, queueInfo } from "../lib/flow.js";
 import { sendProgress } from "../lib/progress.js";
@@ -116,7 +116,7 @@ async function onCommand(chatId: number, text: string) {
       const { plan } = await buildPlan(today);
       return sendMorningCard(chatId, today, plan);
     }
-    case "/replan": { await sendMessage(chatId, "Re-planning today…"); const { plan } = await buildPlan(today); return sendMorningCard(chatId, today, plan); }
+    case "/replan": { await sendMessage(chatId, "Re-planning today from scratch…"); const { plan } = await rebuildToday(); return sendMorningCard(chatId, today, plan); }
     case "/review": return srs.startSession(chatId, Number(args[0]) || 15, "micro");
     case "/lesson": {
       const n = Number(args[0]);

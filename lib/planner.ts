@@ -39,7 +39,9 @@ Rules: total 120-180 min. Daily: one drill, one graded production item (writing/
 export async function rebuildToday() {
   const learner = await getLearner();
   const today = localDate(learner.tz);
-  await sql`DELETE FROM deliveries WHERE plan_date = ${today} AND status = 'pending'`;
+  // The day restarts: drop every delivery row for today (sent/completed included), otherwise the slot buttons
+  // see yesterday's-plan rows as "already done" and materialise() skips the slots.
+  await sql`DELETE FROM deliveries WHERE plan_date = ${today}`;
   return buildPlan(today);
 }
 
