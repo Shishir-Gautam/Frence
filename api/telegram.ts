@@ -17,6 +17,7 @@ import { teachable } from "../lib/grammar.js";
 import { tutor, ask, COMPETENCIES, pingModels, isQuotaExhausted, quotaPaused } from "../lib/coach.js";
 import { localDate } from "../lib/time.js";
 import { startFromZero, stage, INTRO } from "../lib/stage.js";
+import { startPractice, practiceAnswer, explainLastMiss } from "../lib/teach.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(200).send("ok");
@@ -71,8 +72,9 @@ async function onMessage(m: any) {
   if (!text) return;
   if (text.startsWith("/")) return onCommand(chatId, text);
 
-  // 1. an open check consumes typed answers; 2. then an open card session
+  // 1. an open check consumes typed answers; 2. guided practice; 3. an open card session
   if (await checks.answer({ text })) return;
+  if (await practiceAnswer(text)) return;
   if (await srs.handleTyped(chatId, text)) return;
 
   const awaiting = await kvGet<any>("awaiting");
@@ -192,8 +194,11 @@ async function onCallback(q: any) {
   }
   if (kind === "unit") {
     if (a === "check") { const [, , , dId, env] = data.split(":"); return startUnitCheck(chatId, Number(b), env && env !== "undefined" ? env : "patrol", Number(dId) || undefined); }
+    if (a === "practice") { const saved = await kvGet<{ cb: string }>("practice_cb:" + b); return startPractice(chatId, Number(b), saved?.cb ?? `unit:check:${b}:0:patrol`); }
     if (a === "notes") return sendNotes(chatId, Number(b));
   }
+  if (kind === "prac" && a === "show") return practiceAnswer(undefined, true);
+  if (kind === "why") return explainLastMiss(chatId);
   if (kind === "drill" && a === "spot") return startSpotCheck(chatId, Number(b), c ? Number(c) : undefined);
   if (kind === "gram" && a === "test") return startGrammarTest(chatId, b, c ? Number(c) : undefined);
   if (kind === "interview" && a === "end") return finishInterview(chatId);

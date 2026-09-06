@@ -50,9 +50,9 @@ type Session = { chatId: number; queue: number[]; pos: number; again: number; st
 
 export async function startSession(chatId: number, limit = 15, env = "micro", intro?: string): Promise<number> {
   const b = await busy();
-  if (b === "check" || b === "interview") {
+  if (b === "check" || b === "interview" || b === "practice") {
     await kvSet("srs_deferred", { chatId, count: limit }, 180);
-    await sendMessage(chatId, "🃏 Cards are queued — they'll come right after your current test.");
+    await sendMessage(chatId, "🃏 Cards are queued — they'll come right after what you're doing.");
     return 0;
   }
   if (b === "srs") {   // already running: just re-show the current card
@@ -95,7 +95,8 @@ export async function handleTyped(chatId: number, text: string) {
   const verdict = check(text, c.back, c.accept ?? []);
   const rating = verdictToRating(verdict, s.shown_at ? Date.now() - s.shown_at : undefined);
   const line = verdict === "exact" ? `✅ <b>${esc(c.back)}</b>` : verdict === "close" ? `🟡 Almost — <b>${esc(c.back)}</b>` : `❌ <b>${esc(c.back)}</b>\n<i>you wrote: ${esc(text)}</i>`;
-  await sendMessage(chatId, line);
+  if (verdict !== "exact") await kvSet("last_miss", { given: text, expected: c.back, prompt: c.front }, 60);
+  await sendMessage(chatId, line, verdict === "exact" ? undefined : [[{ text: "❓ Why?", callback_data: "why:last" }]]);
   await applyRating(c, rating, s, text);
   return true;
 }

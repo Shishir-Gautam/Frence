@@ -48,8 +48,8 @@ export async function startFromZero() {
 }
 
 export const INTRO = `🌱 <b>How this works</b>
-1. A lesson arrives (walk + listen). Tap <b>Check me</b>, answer 5 short questions from it. 80% = passed → next lesson tomorrow; below → same lesson again with what you missed.
+1. A lesson arrives in three steps: <b>learn</b> (goal, new words with audio, the dialogue, what to notice) → <b>practice</b> (4 guided tries with hints, not scored) → <b>check</b> (5 short questions, scored). 80% = passed → next lesson tomorrow; below → the same lesson again with what you missed.
 2. Cards arrive 3× a day: type the French. They only contain words from your lessons.
 3. In the car: the lesson's lines as prompt → pause → answer. Say it out loud. A 5-question spot check comes later.
 4. Evening: recall yesterday's lesson from English.
-No commands needed. If something is wrong, /skip. Progress: /progress.`;
+Every wrong answer has a ❓ Why? button. No commands needed. If something is stuck, /skip. Progress: /progress.`;

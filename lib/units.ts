@@ -7,6 +7,7 @@ import { ask } from "./coach.js";
 import { addCards } from "./srs.js";
 import { startCheck, authorUnitGate } from "./checks.js";
 import { splitTelegram } from "./text.js";
+import { knownMaterial, knownClause } from "./stage.js";
 
 export async function getUnit(id: number) { return one`SELECT * FROM resource_units WHERE id = ${id}`; }
 
@@ -48,12 +49,20 @@ export async function authorCoachLesson() {
   const seq = Number(last?.s ?? 0) + 1;
   const step = LADDER[(seq - 1) % LADDER.length];
   const clb = seq <= 6 ? 1 : seq <= 12 ? 2 : 3;
-  const r = await ask<{ title: string; dialogue: { fr: string; en: string }[]; notes: string; exercises: { fr: string; en: string }[] }>("EXAMINER",
+  const known = await knownMaterial();
+  const r = await ask<{ title: string; goal: string; vocab: { fr: string; en: string; tip: string }[]; dialogue: { fr: string; en: string }[]; notes: string; practice: { prompt_en: string; hint: string; answer_fr: string; accept: string[]; why: string }[]; exercises: { fr: string; en: string }[] }>("EXAMINER",
     `Write beginner lesson ${seq} for an absolute-beginner learner (CLB ${clb}) in the style of an Assimil lesson. Theme: ${step.theme}. Grammar codes to seed: ${step.codes.join(", ")}.
-dialogue: 8-10 short natural lines (a two-person exchange or a first-person monologue) — everyday Canadian-French register, one new structure at a time, each line ≤ 12 words, with a faithful English translation. notes: ≤120 words in English explaining the 2-3 patterns used (pronunciation tips for liaison/nasal vowels welcome). exercises: 4 EN→FR sentences that recombine the lesson's words.
-Return {"title" (French, ≤6 words),"dialogue":[{"fr","en"}],"notes","exercises":[{"fr","en"}]}`, { temperature: 0.6 });
+${seq > 1 ? knownClause(known) + " You may add at most 10 NEW words in this lesson; everything else must be already-known material." : "This is lesson 1: the learner knows nothing."}
+Return JSON with:
+- title (French, ≤6 words)
+- goal: one sentence in English, "After this lesson you can …"
+- vocab: 8-12 new words/chunks {fr, en, tip} (tip ≤10 words: pronunciation or usage)
+- dialogue: 8-10 short natural lines (two-person exchange), everyday Canadian-French register, one new structure at a time, each line ≤12 words, faithful English translation {fr, en}
+- notes: ≤150 words in English: the 1-2 patterns introduced, each with 3 example sentences built only from the dialogue's words; pronunciation tips for liaison/nasal vowels. Plain text.
+- practice: 4 guided items {prompt_en, hint, answer_fr, accept[], why(≤15 words)} reusing only dialogue words; item 4 recombines two lines
+- exercises: 4 EN→FR sentences {fr, en} that recombine the lesson's words`, { temperature: 0.6 });
   const ins = await sql`INSERT INTO resource_units (resource_id, seq, title, clb_level, skills, payload)
-    VALUES ('coach_lessons', ${seq}, ${r.title}, ${clb}, ${["listening", "reading"]}, ${json({ dialogue: r.dialogue, notes: r.notes, exercises: r.exercises, codes: step.codes })}::jsonb) RETURNING *`;
+    VALUES ('coach_lessons', ${seq}, ${String(r.title ?? `Leçon ${seq}`)}, ${clb}, ${["listening", "reading"]}, ${json({ goal: r.goal, vocab: r.vocab, dialogue: r.dialogue, notes: r.notes, practice: r.practice, exercises: r.exercises, codes: step.codes })}::jsonb) RETURNING *`;
   return ins[0];
 }
 
@@ -110,29 +119,21 @@ async function sendAssimil(chatId: number, u: any, env: string, mode: "study" | 
     await sendMessage(chatId, "Shadowed it?", [[{ text: "✅ Done", callback_data: "q:next" }]]);   // replay has no check: learner advances the slot
     return;
   }
-  const header = `📖 <b>${u.resource_id === "assimil" ? "Assimil" : "Leçon"} ${u.seq} — ${esc(u.title ?? "")}</b>${isRevision ? "\n<i>Révision</i>" : `\n<i>${env === "patrol" ? "Listen ×2 while walking, read along, repeat aloud." : "Listen, read, repeat."} Then tap Check.</i>`}`;
-  const body = isRevision ? esc(u.payload.notes ?? "") : d.map((l, i) => `${i + 1}. ${esc(l.fr)}\n    <i>${esc(l.en)}</i>`).join("\n");
-  const chunks = splitTelegram(`${header}\n\n${body}`);
-  for (let i = 0; i < chunks.length; i++) await sendMessage(chatId, chunks[i], i === chunks.length - 1 && !isRevision ? undefined : undefined);
-  if (!isRevision) {
-    if (u.audio_slow) await sendVoiceById(chatId, u.audio_slow, `🐢 Leçon ${u.seq} — lent`);
-    else { const mp3 = await speakDialogue(d, "slow"); const id = await sendVoice(chatId, mp3, `🐢 Leçon ${u.seq} — lent`); await sql`UPDATE resource_units SET audio_slow = ${id} WHERE id = ${u.id}`; }
-    if (u.audio_normal) await sendVoiceById(chatId, u.audio_normal, `🐇 Leçon ${u.seq} — naturel`);
-    else { const mp3 = await speakDialogue(d, "normal"); const id = await sendVoice(chatId, mp3, `🐇 Leçon ${u.seq} — naturel`); await sql`UPDATE resource_units SET audio_normal = ${id} WHERE id = ${u.id}`; }
-    // cards from the lesson, once
-    const have = await one`SELECT COUNT(*)::int AS n FROM cards WHERE unit_id = ${u.id}`;
-    if (!have?.n) {
-      const r = await ask<{ cards: { front: string; back: string; accept: string[]; kind: string; competency_code: string | null }[] }>("EXAMINER",
-        `From this lesson (${u.resource_id} ${u.seq}) extract 8-12 flashcards for a beginner: high-frequency chunks, nouns with article, one grammar pattern (tag competency_code). front = EN prompt with disambiguating hint, back = FR, accept = natural variants. Dialogue: ${JSON.stringify(d)}. Notes: ${u.payload.notes ?? ""}. Return {"cards":[...]}`, { temperature: 0.3 });
-      const n = await addCards((r.cards ?? []).map((c) => ({ ...c, unit_id: u.id, tags: [u.resource_id] })));
-      if (n) await sendMessage(chatId, `🃏 ${n} cards from this lesson added.`);
-    }
+  if (isRevision) {
+    for (const c of splitTelegram(`📖 <b>Révision ${u.seq}</b>\n\n${esc(u.payload.notes ?? "")}`)) await sendMessage(chatId, c);
+    await sendMessage(chatId, "Read the revision notes, then:", [[{ text: "🧪 Check me", callback_data: cb }]]);
+    return;
   }
-  if (!isRevision && u.payload?.notes) {   // the teaching part: what to notice in this lesson
-    for (const c of splitTelegram(`📝 <b>What to notice</b>\n${esc(String(u.payload.notes).slice(0, 1200))}`)) await sendMessage(chatId, c);
+  // TEACH → PRACTICE → CHECK (lib/teach.ts). Cards for the lesson are created once, in the background of the teach step.
+  const { teach } = await import("./teach.js");
+  await teach(chatId, u, env);
+  const have = await one`SELECT COUNT(*)::int AS n FROM cards WHERE unit_id = ${u.id}`;
+  if (!have?.n) {
+    const r = await ask<{ cards: { front: string; back: string; accept: string[]; kind: string; competency_code: string | null }[] }>("EXAMINER",
+      `From this lesson (${u.resource_id} ${u.seq}) extract 8-12 flashcards for a beginner: high-frequency chunks, nouns with article, one grammar pattern (tag competency_code). front = EN prompt with disambiguating hint, back = FR, accept = natural variants. Dialogue: ${JSON.stringify(d)}. Notes: ${u.payload.notes ?? ""}. Return {"cards":[...]}`, { temperature: 0.3 });
+    await addCards((r.cards ?? []).map((c) => ({ ...c, unit_id: u.id, tags: [u.resource_id] })));
   }
-  const kb: Keyboard = [[{ text: "🧪 Check me (5 items)", callback_data: cb }], [{ text: "📚 Exercises", callback_data: `unit:notes:${u.id}` }]];
-  await sendMessage(chatId, isRevision ? "Read the revision notes, then:" : "Listened twice and repeated out loud? Then:", isRevision ? [[{ text: "🧪 Check me", callback_data: cb }]] : kb);
+  await kvSet("practice_cb:" + u.id, { cb }, 12 * 60);   // the practice flow needs the check callback (carries delivery id + env)
 }
 
 async function sendEpisode(chatId: number, u: any, env: string, cb: string) {

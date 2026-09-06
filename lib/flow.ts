@@ -14,8 +14,9 @@ import { sendMessage, esc } from "./telegram.js";
 
 export type Queue = { chatId: number; env: string; deliveryId?: number; items: any[]; current?: any; started: number };
 
-export async function busy(): Promise<"check" | "srs" | "interview" | null> {
+export async function busy(): Promise<"check" | "srs" | "interview" | "practice" | null> {
   if (await kvGet("check_session")) return "check";
+  if (await kvGet("practice_session")) return "practice";
   if (await kvGet("interview_session")) return "interview";
   if (await kvGet("srs_session")) return "srs";
   return null;
@@ -61,4 +62,4 @@ export async function itemDone(sendItem: (item: any) => Promise<any>, startSrs: 
 }
 
 export async function queueInfo() { return kvGet<Queue>("slot_queue"); }
-export async function clearAll() { for (const k of ["slot_queue", "check_session", "srs_session", "interview_session", "awaiting", "srs_deferred"]) await kvDel(k); }
+export async function clearAll() { for (const k of ["slot_queue", "check_session", "srs_session", "interview_session", "practice_session", "awaiting", "srs_deferred"]) await kvDel(k); }

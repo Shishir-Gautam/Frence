@@ -66,6 +66,7 @@ function mockGemini(role: string, user: string): any {
       { kind: "dictation", prompt: "Dictée", expected: "Je vais bien", accept: [], item_clb: 1, skill: "listening" },
       { kind: "typed", prompt: "Make it negative: je vais bien", expected: "Je ne vais pas bien", accept: [], competency_code: "NEG_BASE", item_clb: 2 },
       { kind: "mcq", prompt: "« Merci » = ?", options: ["Thanks", "Sorry", "Please", "Hi"], answer_index: 0, item_clb: 1, skill: "reading" }] };
+    if (/TEACHING layer/.test(user)) return { goal: "After this lesson you can greet someone.", vocab: [{ fr: "bonjour", en: "hello", tip: "final -r soft" }], notes: "Bonjour = hello.", practice: [{ prompt_en: "Say hello", hint: "one word", answer_fr: "Bonjour", accept: [], why: "greeting" }, { prompt_en: "I am fine", hint: "je vais…", answer_fr: "Je vais bien", accept: [], why: "aller" }] };
     if (/extract 8-12 flashcards/.test(user)) return { cards: [{ front: "good morning", back: "bonjour", accept: [], kind: "vocab", competency_code: null }, { front: "thank you", back: "merci", accept: [], kind: "vocab", competency_code: null }, { front: "I am (to be, 1sg)", back: "je suis", accept: [], kind: "grammar", competency_code: "TNS_PRESENT_IRREG" }] };
     if (/Competency/.test(user) && /brief_en/.test(user)) return { brief_en: "Rule.", examples: [{ fr: "Je parle", en: "I speak" }], items: Array.from({ length: 6 }, (_, i) => ({ kind: "typed", prompt: `I speak ${i}`, expected: `Je parle ${i}`, accept: [], competency_code: user.match(/Competency ([A-Z_]+)/)?.[1], item_clb: 3 })) };
     if (/LISTENING set/.test(user)) return { title: "À la gare", passage: "Le train part à huit heures.", items: [{ kind: "mcq", prompt: "Le train part à quelle heure ?", options: ["8 h", "9 h", "10 h", "11 h"], answer_index: 0, item_clb: 2, skill: "listening" }, { kind: "mcq", prompt: "Où ?", options: ["gare", "port", "école", "banque"], answer_index: 0, item_clb: 2, skill: "listening" }] };
@@ -89,6 +90,7 @@ import { recordEvidence, teachable } from "../lib/grammar.js";
 import { buildPlan } from "../lib/planner.js";
 import { runDelivery } from "../lib/deliver.js";
 import { startUnitCheck } from "../lib/units.js";
+import { startPractice, practiceAnswer } from "../lib/teach.js";
 import * as checks from "../lib/checks.js";
 import { authorDrill, sendDrill, startSpotCheck } from "../lib/drills.js";
 import { sendGrammarBrief, startGrammarTest } from "../lib/generate.js";
@@ -150,6 +152,11 @@ const patrol = await one`SELECT id, slot, environment, payload, plan_date::text 
 await runDelivery(patrol as any);
 assert(sent.some((s) => s.method === "sendVoice"), "patrol slot sent lesson voice notes (TTS mocked)");
 const unitId = Number(patrol!.payload.items[0].unit_id);
+assert(sent.some((m) => String(m.text).includes("New words")) && sent.some((m) => String(m.text).includes("What to notice")), "teach step sent: goal, new words, dialogue, what to notice");
+await startPractice(CHAT, unitId, `unit:check:${unitId}:${patrol!.id}:patrol`);
+assert(await practiceAnswer("bonjour"), "practice item 1 consumed a typed answer (unscored)");
+assert(await practiceAnswer("je vais bien"), "practice item 2 consumed; practice complete");
+assert(!(await one`SELECT 1 FROM kv WHERE k = 'practice_session'`) && Number((await one`SELECT COUNT(*)::int AS n FROM unit_checks`)!.n) === 0, "practice recorded nothing");
 await startUnitCheck(CHAT, unitId, "patrol", Number(patrol!.id));
 await checks.answer({ text: "bonjour" }); await checks.answer({ text: "Comment vas-tu" }); await checks.answer({ text: "Je vais bien" }); await checks.answer({ text: "Je ne vais pas bien" }); await checks.answer({ mcq: 0 });
 const u = await one`SELECT status, best_score FROM resource_units WHERE id = ${unitId}`;

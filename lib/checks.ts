@@ -39,6 +39,7 @@ export async function startCheck(s: Omit<CheckSession, "pos" | "started">): Prom
     return false;
   }
   if (b === "srs") await abortSession(s.chatId);        // cards can be resumed later; a check is more important
+  if (b === "practice") await kvDel("practice_session");
   if (!s.items.length) { await sendMessage(s.chatId, "Couldn't build this check — try again."); return false; }
   const sess: CheckSession = { ...s, pos: 0, started: Date.now() };
   await kvSet("check_session", sess, 180);
@@ -100,7 +101,9 @@ export async function answer(input: { text?: string; mcq?: number; pos?: number;
     // "close" (typo-level) only counts when no grammar competency is being tested and it isn't a dictation:
     // a one-letter ending error IS the grammar error.
     verdict = v; correct = v === "exact" || (v === "close" && it.kind !== "dictation" && !it.competency_code);
-    await sendMessage(s.chatId, v === "exact" ? `✅ <b>${esc(it.expected ?? "")}</b>` : v === "close" ? `🟡 Almost — <b>${esc(it.expected ?? "")}</b>` : `❌ → <b>${esc(it.expected ?? "")}</b>`);
+    if (!correct) await kvSet("last_miss", { given, expected: it.expected, prompt: it.prompt }, 60);
+    await sendMessage(s.chatId, v === "exact" ? `✅ <b>${esc(it.expected ?? "")}</b>` : v === "close" ? `🟡 Almost — <b>${esc(it.expected ?? "")}</b>` : `❌ → <b>${esc(it.expected ?? "")}</b>`,
+      correct ? undefined : [[{ text: "❓ Why?", callback_data: "why:last" }]]);
   } else return false;
 
   // optimistic lock: if another handler advanced the session meanwhile (duplicate delivery), drop this one
