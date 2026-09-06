@@ -83,7 +83,8 @@ function mockGemini(role: string, user: string): any {
 // ------------------------------------------------------------------ run
 import { sql, one, getLearner } from "../lib/db.js";
 import { seedAll } from "../lib/seed.js";
-import { addCards, startSession, handleTyped, srsStats } from "../lib/srs.js";
+import { addCards, startSession, handleTyped, srsStats, abortSession as srs_abort_ } from "../lib/srs.js";
+const srs_abort = () => srs_abort_(42);
 import { recordEvidence, teachable } from "../lib/grammar.js";
 import { buildPlan } from "../lib/planner.js";
 import { runDelivery } from "../lib/deliver.js";
@@ -135,9 +136,10 @@ const rl = await sql`SELECT rating, scheduled_days FROM review_log ORDER BY id`;
 assert(rl.length === 2 && rl[0].rating >= 3 && rl[1].rating === 2, `review_log written with FSRS ratings ${rl.map((r) => r.rating).join(",")} / intervals ${rl.map((r) => r.scheduled_days).join(",")}d`);
 
 // planner -> deliveries
-const today = localDate("America/Toronto");
-const { plan } = await buildPlan(today);
+const { date: today, plan } = await buildPlan();   // tomorrow: full materialisation + drill pre-authoring
 assert(plan.slots.length === 4, "planner produced 4 slots (validated against NEXT UNITS / TEACHABLE)");
+assert(plan.slots.some((s) => s.items.some((i: any) => i.type === "drill" && i.drill_id)), "nightly plan pre-authored the drill");
+assert(!plan.slots.some((s) => s.items.some((i: any) => i.type === "listening_set")), "listening set stripped for a CLB<3 learner");
 const dl = await sql`SELECT slot, environment FROM deliveries WHERE plan_date = ${today} ORDER BY scheduled_at`;
 assert(dl.length === 1 + 1 + 3 + 1 + 1 + 1, `materialised ${dl.length} deliveries (${dl.map((d) => d.slot).join(",")})`);
 
@@ -152,6 +154,18 @@ await checks.answer({ text: "bonjour" }); await checks.answer({ text: "Comment v
 const u = await one`SELECT status, best_score FROM resource_units WHERE id = ${unitId}`;
 assert(u!.status === "passed", `gate check passed -> unit status '${u!.status}' (${u!.best_score}%)`);
 assert((await one`SELECT status FROM deliveries WHERE id = ${patrol!.id}`)!.status === "completed", "delivery marked completed only after the check");
+
+// collision: a card session running when a check starts gets paused; cards deferred behind a check resume after it
+await sql`UPDATE cards SET suspended = FALSE`;
+await startSession(CHAT, 5, "micro");
+assert(!!(await one`SELECT 1 FROM kv WHERE k = 'srs_session'`), "card session open");
+await checks.startCheck({ chatId: CHAT, type: "grammar_test", title: "collision", items: [{ kind: "typed", prompt: "hello", expected: "bonjour", accept: [] }], env: "seated", pass_pct: 80 });
+assert(!(await one`SELECT 1 FROM kv WHERE k = 'srs_session'`), "check start paused the card session");
+await startSession(CHAT, 5, "micro");
+assert(!!(await one`SELECT 1 FROM kv WHERE k = 'srs_deferred'`), "cards deferred while a check is open");
+await checks.answer({ text: "bonjour" });
+assert(!!(await one`SELECT 1 FROM kv WHERE k = 'srs_session'`) && !(await one`SELECT 1 FROM kv WHERE k = 'srs_deferred'`), "deferred cards resumed after the check");
+await srs_abort();
 
 // drill: author + render + spot check
 const code = (await teachable(1))[0].code;

@@ -45,7 +45,7 @@ export type Learner = {
   placement_done: boolean; schedule: Record<string, any>; settings: Record<string, any>;
 };
 export async function getLearner(): Promise<Learner> {
-  const l = await one`SELECT * FROM learner WHERE id = 1`;
+  const l = await one`SELECT *, start_date::text AS start_date, exam_date::text AS exam_date FROM learner WHERE id = 1`;
   if (!l) throw new Error("learner row missing — run /api/setup");
   return { ...l, chat_id: l.chat_id ? Number(l.chat_id) : null } as Learner;
 }
@@ -108,8 +108,9 @@ export async function plannerSnapshot() {
   const errors = await sql`SELECT category, kind, count FROM error_patterns ORDER BY count DESC, last_seen DESC LIMIT 10`;
   const lastPlans = await sql`SELECT plan_date, plan->>'focus' AS focus FROM plans ORDER BY plan_date DESC LIMIT 7`;
   const skipped = await sql`SELECT slot, status, COUNT(*)::int AS n FROM deliveries WHERE plan_date >= CURRENT_DATE - 6 AND status IN ('skipped','stale','failed','sent') GROUP BY slot, status`;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: learner.tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   return {
-    today: new Date().toISOString().slice(0, 10), days_since_start: daysIn, exam_date: learner.exam_date, target_clb: learner.target_clb,
+    today, days_since_start: daysIn, exam_date: learner.exam_date, target_clb: learner.target_clb,
     placement_done: learner.placement_done, current_clb: clb, schedule: learner.schedule, settings: learner.settings,
     grammar_grid_weakest_first: grid, fsrs_load: fsrs,
     resources, next_units: nextUnits, unit_stats: unitStats,

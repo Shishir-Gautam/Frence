@@ -15,7 +15,8 @@ export async function sendListeningSet(chatId: number, env = "patrol", deliveryI
     `TCF Canada LISTENING set. Learner CLB ${clb.toFixed(1)}; pitch the audio at CLB ${Math.min(12, Math.ceil(clb + 1))} (${clbToCefr(clb + 1)}). Theme: ${theme}.
 passage: natural spoken French (dialogue or announcement, 60-140 words, names, numbers, a negation, one idiom). items: 4 MCQs in French, kind "mcq", 4 options ≤60 chars, answer_index, item_clb, skill "listening".
 Return {"title","passage","items":[...]}`, { temperature: 0.5 });
-  await sendMessage(chatId, `🎧 <b>Écoute — ${esc(set.title)}</b>\n<i>Une seule écoute, like the exam. Theme: ${esc(theme)}</i>`);
+  if (!set?.passage) throw new Error("listening set: no passage");
+  await sendMessage(chatId, `🎧 <b>Écoute — ${esc(set.title ?? "")}</b>\n<i>Une seule écoute, like the exam. Theme: ${esc(theme)}</i>`);
   await sendChatAction(chatId, "record_voice");
   await sendVoice(chatId, await speakFrench(set.passage, "normal"), "▶️");
   await kvSet("last_passage", { passage: set.passage }, 60);
@@ -29,7 +30,8 @@ export async function sendReadingSet(chatId: number, env = "seated", deliveryId?
     `TCF Canada READING set. Learner CLB ${clb.toFixed(1)}; text at CLB ${Math.min(12, Math.ceil(clb + 1))}. Theme: ${theme}.
 text: realistic French document (sign, ad, email, forum post or short article, 80-200 words) with level-appropriate connectors. items: 4 MCQs in French, kind "mcq", 4 options ≤60 chars, answer_index, item_clb, skill "reading".
 Return {"title","text","items":[...]}`, { temperature: 0.5 });
-  await sendMessage(chatId, `📰 <b>Lecture — ${esc(set.title)}</b>\n\n${esc(set.text)}`);
+  if (!set?.text) throw new Error("reading set: no text");
+  await sendMessage(chatId, `📰 <b>Lecture — ${esc(set.title ?? "")}</b>\n\n${esc(set.text)}`);
   await startCheck({ chatId, type: "reading_set", title: set.title, items: sanitize(set.items).map((i) => ({ ...i, skill: "reading" })), env, pass_pct: 75, meta: { delivery_id: deliveryId } });
 }
 
@@ -54,10 +56,11 @@ export async function sendWritingTask(chatId: number, task: WritingTask = "micro
   const p = await ask<{ prompt_fr: string; instructions_en: string; helpers: string[]; target_codes: string[] }>("EXAMINER",
     `${W_SPEC[task]} Learner writing CLB ${clb.toFixed(1)}. Theme: ${randomTheme()}.
 Return {"prompt_fr","instructions_en" (word count, time, what graders look for),"helpers":[4-6 expressions with EN gloss],"target_codes":[1-3 competency codes this task should elicit]}`, { temperature: 0.6 });
-  const ins = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('writing', ${task}, 'seated', ${p.prompt_fr}) RETURNING id`;
+  if (!p?.prompt_fr) throw new Error("writing task: empty prompt from model");
+  const ins = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('writing', ${task}, 'seated', ${String(p.prompt_fr)}) RETURNING id`;
   await kvSet("awaiting", { kind: "writing", submission_id: Number(ins[0].id), task, delivery_id: deliveryId }, 12 * 60);
   await sendMessage(chatId,
-    `✍️ <b>Expression écrite — ${task === "micro" ? "micro" : "TCF " + task.slice(4).toUpperCase()}</b>\n\n${esc(p.prompt_fr)}\n\n<i>${esc(p.instructions_en)}</i>\n\n💡 ${(p.helpers ?? []).map(esc).join(" · ")}\n\nReply with your text. Graded against the TCF rubric with a CLB sub-score.`,
+    `✍️ <b>Expression écrite — ${task === "micro" ? "micro" : "TCF " + task.slice(4).toUpperCase()}</b>\n\n${esc(p.prompt_fr)}\n\n<i>${esc(p.instructions_en ?? "")}</i>\n\n💡 ${(p.helpers ?? []).map((h) => esc(String(h))).join(" · ")}\n\nReply with your text. Graded against the TCF rubric with a CLB sub-score.`,
     [[{ text: "⏭ Skip", callback_data: "skip:writing" }]]);
 }
 
@@ -65,10 +68,11 @@ export async function sendSpeakingTask(chatId: number, task: SpeakingTask = "mic
   const clb = (await currentClb()).speaking.clb;
   const p = await ask<{ prompt_fr: string; instructions_en: string; helpers: string[] }>("EXAMINER",
     `${S_SPEC[task]} Learner speaking CLB ${clb.toFixed(1)}. Theme: ${randomTheme()}. Return {"prompt_fr","instructions_en","helpers":[4-6 expressions with EN gloss]}`, { temperature: 0.6 });
-  const ins = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('speaking', ${task}, 'seated', ${p.prompt_fr}) RETURNING id`;
+  if (!p?.prompt_fr) throw new Error("speaking task: empty prompt from model");
+  const ins = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('speaking', ${task}, 'seated', ${String(p.prompt_fr)}) RETURNING id`;
   await kvSet("awaiting", { kind: "speaking", submission_id: Number(ins[0].id), task, delivery_id: deliveryId }, 12 * 60);
   await sendMessage(chatId,
-    `🎤 <b>Expression orale — ${task === "micro" ? "micro" : "TCF " + task.slice(4).toUpperCase()}</b>\n\n${esc(p.prompt_fr)}\n\n<i>${esc(p.instructions_en)}</i>\n\n💡 ${(p.helpers ?? []).map(esc).join(" · ")}\n\n🎙 Reply with a voice message.`,
+    `🎤 <b>Expression orale — ${task === "micro" ? "micro" : "TCF " + task.slice(4).toUpperCase()}</b>\n\n${esc(p.prompt_fr)}\n\n<i>${esc(p.instructions_en ?? "")}</i>\n\n💡 ${(p.helpers ?? []).map((h) => esc(String(h))).join(" · ")}\n\n🎙 Reply with a voice message.`,
     [[{ text: "⏭ Skip", callback_data: "skip:speaking" }]]);
 }
 
@@ -77,9 +81,9 @@ export async function startInterview(chatId: number, task: "tcf_s1" | "tcf_s3" =
   const clb = (await currentClb()).speaking.clb;
   const q = await ask<{ opening_fr: string; topic: string }>("EXAMINER",
     `Start a TCF Canada ${task === "tcf_s1" ? "Task 1 guided interview (personal questions)" : "Task 3 opinion discussion"} for a CLB ${clb.toFixed(1)} learner. Theme: ${randomTheme()}. Return {"opening_fr": the examiner's first question in French, "topic"}`, { temperature: 0.7 });
-  const ins = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('speaking', ${"interview_" + task.slice(4)}, 'seated', ${q.topic}) RETURNING id`;
-  await kvSet("awaiting", { kind: "interview", submission_id: Number(ins[0].id), task, turns: [{ role: "examiner", text: q.opening_fr }], max_turns: task === "tcf_s1" ? 5 : 4, delivery_id: deliveryId }, 60);
-  await sendMessage(chatId, `🎙 <b>Entretien — ${task === "tcf_s1" ? "Tâche 1" : "Tâche 3"}</b>\n<i>Answer each question by voice. I follow up like an examiner, then grade the whole exchange.</i>\n\n🧑‍⚖️ ${esc(q.opening_fr)}`, [[{ text: "⏹ End interview", callback_data: "interview:end" }]]);
+  const ins = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('speaking', ${"interview_" + task.slice(4)}, 'seated', ${String(q.topic ?? q.opening_fr ?? "interview")}) RETURNING id`;
+  await kvSet("interview_session", { kind: "interview", submission_id: Number(ins[0].id), task, turns: [{ role: "examiner", text: String(q.opening_fr) }], max_turns: task === "tcf_s1" ? 5 : 4, delivery_id: deliveryId }, 60);
+  await sendMessage(chatId, `🎙 <b>Entretien — ${task === "tcf_s1" ? "Tâche 1" : "Tâche 3"}</b>\n<i>Answer each question by voice. I follow up like an examiner, then grade the whole exchange.</i>\n\n🧑‍⚖️ ${esc(String(q.opening_fr))}`, [[{ text: "⏹ End interview", callback_data: "interview:end" }]]);
 }
 
 /** Grammar brief + 6-item typed test (Kwiziq-style), seated. */
@@ -88,8 +92,8 @@ export async function sendGrammarBrief(chatId: number, code: string, deliveryId?
   if (!c) return sendMessage(chatId, `Unknown competency ${code}`);
   const clb = (await currentClb()).writing.clb;
   const g = await authorGrammarTest(code, c.name, c.description + (c.test_focus ? ` Test focus: ${c.test_focus.join("; ")}` : ""), Math.max(2, Math.round(clb)));
-  const ex = (g.examples ?? []).map((e) => `• ${esc(e.fr)}\n  <i>${esc(e.en)}</i>`).join("\n");
-  await sendMessage(chatId, `📐 <b>${esc(c.name)}</b>\n\n${esc(g.brief_en)}\n\n${ex}`, [[{ text: "🧪 Test me (6)", callback_data: `gram:test:${code}${deliveryId ? ":" + deliveryId : ""}` }]]);
+  const ex = (g.examples ?? []).filter((e) => e?.fr).map((e) => `• ${esc(e.fr)}\n  <i>${esc(e.en ?? "")}</i>`).join("\n");
+  await sendMessage(chatId, `📐 <b>${esc(c.name)}</b>\n\n${esc(g.brief_en ?? "")}\n\n${ex}`, [[{ text: "🧪 Test me (6)", callback_data: `gram:test:${code}${deliveryId ? ":" + deliveryId : ""}` }]]);
   await kvSet("grammar_test:" + code, sanitize(g.items), 12 * 60);
 }
 export async function startGrammarTest(chatId: number, code: string, deliveryId?: number) {

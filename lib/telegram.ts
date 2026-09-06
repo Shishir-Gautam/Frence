@@ -29,7 +29,7 @@ async function callMultipart<T = any>(method: string, fields: Record<string, any
 }
 
 /** HTML-escape user/AI text for parse_mode=HTML */
-export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+export const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 export function sendMessage(chatId: number, html: string, keyboard?: Keyboard, extra: any = {}) {
   return call("sendMessage", {
@@ -105,6 +105,8 @@ export function setCommands() {
       { command: "progress", description: "Progress vs CLB 7" },
       { command: "log", description: "Log minutes: /log 25 patrol" },
       { command: "replan", description: "Regenerate today's plan" },
+      { command: "next", description: "Next item of the current slot" },
+      { command: "skip", description: "Abandon the current item/test" },
       { command: "ping", description: "Check which Gemini models respond" },
       { command: "help", description: "What can I do" },
     ],

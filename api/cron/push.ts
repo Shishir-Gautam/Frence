@@ -7,6 +7,10 @@ import { authorized } from "../../lib/auth.js";
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!authorized(req)) return res.status(401).send("unauthorized");
   await sql`UPDATE deliveries SET status='stale' WHERE status='pending' AND scheduled_at <= now() - interval '6 hours'`;
+  // a delivery stuck in 'sending' for 15 min was killed mid-flight: give it one more go, then fail it
+  await sql`UPDATE deliveries SET status = CASE WHEN error LIKE 'retried%' THEN 'failed' ELSE 'pending' END, error = 'retried: timeout' WHERE status='sending' AND sent_at IS NULL AND scheduled_at <= now() - interval '15 minutes' AND (error IS NULL OR error NOT LIKE 'retried%')`;
+  // one retry for transient failures (503 / 429)
+  await sql`UPDATE deliveries SET status='pending', error = 'retried: ' || error WHERE status='failed' AND error IS NOT NULL AND error NOT LIKE 'retried%' AND (error ~* '503|429|UNAVAILABLE|high demand|overloaded') AND scheduled_at > now() - interval '3 hours'`;
   const due = await sql`SELECT id, slot, environment, payload, plan_date::text AS plan_date FROM deliveries
     WHERE status = 'pending' AND scheduled_at <= now() ORDER BY scheduled_at LIMIT 2`;
   const out: any[] = [];

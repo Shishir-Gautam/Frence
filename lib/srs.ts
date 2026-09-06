@@ -6,6 +6,7 @@ import { recordEvidence } from "./grammar.js";
 import { sendMessage, editMessage, esc, type Keyboard } from "./telegram.js";
 import { validCode } from "./coach.js";
 import { localDate } from "./time.js";
+import { busy } from "./flow.js";
 
 export type NewCard = { front: string; back: string; accept?: string[]; kind?: string; answer_mode?: "typed" | "self_rated" | "voice"; competency_code?: string | null; unit_id?: number | null; tags?: string[] };
 
@@ -34,7 +35,7 @@ async function params(): Promise<Params> {
 export async function pickQueue(limit = 15): Promise<number[]> {
   const learner = await getLearner();
   const newPerDay = learner.settings?.new_cards_per_day ?? 20;
-  const nt = await one`SELECT COUNT(DISTINCT card_id)::int AS n FROM review_log WHERE reviewed_at::date = CURRENT_DATE AND state_before = 'new'`;
+  const nt = await one`SELECT COUNT(DISTINCT card_id)::int AS n FROM review_log WHERE (reviewed_at AT TIME ZONE ${learner.tz})::date = ${localDate(learner.tz)}::date AND state_before = 'new'`;
   const due = await sql`SELECT id FROM cards WHERE NOT suspended AND state <> 'new' AND due <= now() ORDER BY due LIMIT ${limit}`;
   const budget = Math.max(0, Math.min(newPerDay - (nt?.n ?? 0), limit - due.length));
   const fresh = budget > 0 ? await sql`SELECT id FROM cards WHERE NOT suspended AND state = 'new' ORDER BY id LIMIT ${budget}` : [];
@@ -44,8 +45,18 @@ export async function pickQueue(limit = 15): Promise<number[]> {
 type Session = { chatId: number; queue: number[]; pos: number; again: number; started: number; env: string; shown_at?: number; awaiting_typed?: number };
 
 export async function startSession(chatId: number, limit = 15, env = "micro", intro?: string): Promise<number> {
+  const b = await busy();
+  if (b === "check" || b === "interview") {
+    await kvSet("srs_deferred", { chatId, count: limit }, 180);
+    await sendMessage(chatId, "🃏 Cards are queued — they'll come right after your current test.");
+    return 0;
+  }
+  if (b === "srs") {   // already running: just re-show the current card
+    const cur = await kvGet<Session>("srs_session");
+    if (cur) { await sendCard(chatId, cur); return cur.queue.length - cur.pos; }
+  }
   const queue = await pickQueue(limit);
-  if (!queue.length) { await sendMessage(chatId, "✅ Rien à réviser pour l'instant."); return 0; }
+  if (!queue.length) { await sendMessage(chatId, "✅ Rien à réviser pour l'instant."); const { onItemDone } = await import("./deliver.js"); await onItemDone("srs"); return 0; }
   const s: Session = { chatId, queue, pos: 0, again: 0, started: Date.now(), env };
   await kvSet("srs_session", s, 120);
   if (intro) await sendMessage(chatId, intro);
@@ -123,12 +134,23 @@ async function applyRating(c: any, rating: Rating, s: Session, typed: string | n
   await next(s.chatId, s);
 }
 
+/** End a running card session early (a check takes priority). Progress so far is already saved per card. */
+export async function abortSession(chatId: number) {
+  const s = await kvGet<Session>("srs_session");
+  if (!s) return;
+  await kvDel("srs_session"); await kvDel("awaiting");
+  if (s.pos > 0) await logActivity(localDate((await getLearner()).tz), s.env, "srs", Math.max(1, Math.round((Date.now() - s.started) / 60000)), true);
+  await sendMessage(chatId, `🃏 Cards paused after ${s.pos} (${s.queue.length - s.pos} left — /review any time).`);
+}
+
 async function next(chatId: number, s: Session) {
   if (s.pos < s.queue.length && s.pos < 45) { await sendCard(chatId, s); return; }
   await kvDel("srs_session");
   const mins = Math.max(1, Math.round((Date.now() - s.started) / 60000));
   await logActivity(localDate((await getLearner()).tz), s.env, "srs", mins, true);
   await sendMessage(chatId, `🎉 ${s.queue.length} cartes · ${s.again} à revoir · ${mins} min.`);
+  const { onItemDone } = await import("./deliver.js");
+  await onItemDone("srs");
 }
 
 export async function srsStats() {

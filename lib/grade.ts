@@ -33,8 +33,9 @@ export async function gradeWriting(chatId: number, text: string) {
 }
 
 export async function gradeSpeaking(chatId: number, audio: Uint8Array, mime: string, fileId: string, durationS?: number) {
+  const interview = await kvGet<any>("interview_session");
+  if (interview) return interviewTurn(chatId, audio, mime, interview);
   const awaiting = await kvGet<any>("awaiting");
-  if (awaiting?.kind === "interview") return interviewTurn(chatId, audio, mime, awaiting);
   let sub = await pendingSubmission("speaking", awaiting?.kind === "speaking" ? awaiting : null);
   if (!sub) { const r = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('speaking','free','seated','(free speaking)') RETURNING *`; sub = r[0]; }
   await sendMessage(chatId, "🎧 Listening… transcribing and grading.");
@@ -47,18 +48,20 @@ async function interviewTurn(chatId: number, audio: Uint8Array, mime: string, st
   const t = await ask<{ transcript: string; follow_up_fr: string; done: boolean }>("EXAMINER",
     `You are the TCF examiner mid-interview. Exchange so far: ${JSON.stringify(st.turns)}. Transcribe the learner's answer exactly (keep errors). Then, unless this was turn ${st.max_turns}, ask ONE natural follow-up question in French that pushes for more detail, a justification, or a past/future form. Return {"transcript","follow_up_fr","done":bool}`,
     { audio: { data: audio, mime }, temperature: 0.5 });
-  st.turns.push({ role: "learner", text: t.transcript });
+  st.turns.push({ role: "learner", text: String(t.transcript ?? "") });
   const learnerTurns = st.turns.filter((x: any) => x.role === "learner").length;
   if (learnerTurns >= st.max_turns || t.done) return finishInterview(chatId, st);
-  st.turns.push({ role: "examiner", text: t.follow_up_fr });
-  await kvSet("awaiting", st, 60);
-  await sendMessage(chatId, `<i>${esc(t.transcript)}</i>\n\n🧑‍⚖️ ${esc(t.follow_up_fr)}`, [[{ text: "⏹ End interview", callback_data: "interview:end" }]]);
+  st.turns.push({ role: "examiner", text: String(t.follow_up_fr ?? "Continuez.") });
+  await kvSet("interview_session", st, 60);
+  await sendMessage(chatId, `<i>${esc(String(t.transcript ?? ""))}</i>\n\n🧑‍⚖️ ${esc(String(t.follow_up_fr ?? "Continuez."))}`, [[{ text: "⏹ End interview", callback_data: "interview:end" }]]);
 }
 export async function finishInterview(chatId: number, st?: any) {
-  st = st ?? (await kvGet<any>("awaiting"));
-  if (!st || st.kind !== "interview") return;
+  st = st ?? (await kvGet<any>("interview_session"));
+  if (!st) return;
+  await kvDel("interview_session");
   const sub = await one`SELECT * FROM submissions WHERE id = ${st.submission_id}`;
   if (!sub) return;
+  if (!st.turns.some((x: any) => x.role === "learner")) { await sendMessage(chatId, "Interview ended with no answers — nothing graded."); const { onItemDone } = await import("./deliver.js"); return onItemDone("interview"); }
   const transcript = st.turns.map((x: any) => `${x.role === "examiner" ? "EXAMINATEUR" : "CANDIDAT"}: ${x.text}`).join("\n");
   await sendMessage(chatId, "🧑‍⚖️ Interview over — grading the whole exchange.");
   const g = await ask<Grade>("GRADER", `Task type: ${sub.task_type} (multi-turn interview; grade ONLY the CANDIDAT lines, as one speaking performance).\nTopic: ${sub.prompt}\n\n${transcript}`, { temperature: 0.2 });
@@ -72,27 +75,29 @@ async function finish(chatId: number, skill: "writing" | "speaking", sub: any, g
             feedback=${json({ strengths: g.strengths, next_focus: g.next_focus, feedback_en: g.feedback_en, corrected_text: g.corrected_text })}::jsonb, graded_at=now() WHERE id=${sub.id}`;
   // evidence (correct AND incorrect uses), weight 1.0 for free production
   const ev = (g.grammar_evidence ?? []).filter((e) => validCode(e.competency_code)).map((e) => ({ ...e, weight: 1.0 }));
-  for (const c of g.corrections ?? []) {
+  for (const c of (g.corrections ?? []).filter((c) => c && c.original)) {
     const code = validCode(c.competency_code);
     if (code && !ev.some((e) => e.competency_code === code && e.excerpt === c.original)) ev.push({ competency_code: code, correct: false, weight: 1.0, excerpt: c.original, correction: c.fix } as any);
-    if (!code && c.error_type && c.error_type !== "grammar") await bumpErrorPattern(c.why.slice(0, 60), c.error_type, `${c.original} → ${c.fix}`);
+    if (!code && c.error_type && c.error_type !== "grammar") await bumpErrorPattern(String(c.why ?? c.error_type).slice(0, 60), String(c.error_type), `${c.original} → ${c.fix}`);
   }
   await recordEvidence("submission", sub.id, ev);
   const added = await addCards((g.new_cards ?? []).slice(0, 6).map((c) => ({ ...c, kind: c.kind ?? "error", tags: [skill, "error"] })));
   const learner = await getLearner();
   await logActivity(localDate(learner.tz), "seated", skill, skill === "writing" ? 15 : 8, true, { table: "submissions", id: sub.id });
-  await kvDel("awaiting");
-  if (extra.delivery_id) await sql`UPDATE deliveries SET status='completed', completed_at=now() WHERE id=${extra.delivery_id}`;
+  const aw = await kvGet<any>("awaiting");
+  if (aw?.kind === skill || aw?.submission_id === sub.id) await kvDel("awaiting");
   await updateProductiveEstimate(skill);
 
   const crit = Object.entries(g.criteria ?? {}).filter(([, v]) => v != null).map(([k, v]) => `${k.replace(/_/g, " ")} ${v}`).join(" · ");
-  const corr = (g.corrections ?? []).slice(0, 8).map((c) => `• <s>${esc(c.original)}</s> → <b>${esc(c.fix)}</b>\n  <i>${esc(c.why)}${c.competency_code ? ` [${esc(competencyName(c.competency_code))}]` : ""}</i>`).join("\n");
+  const corr = (g.corrections ?? []).filter((c) => c && c.original && c.fix).slice(0, 8).map((c) => `• <s>${esc(c.original)}</s> → <b>${esc(c.fix)}</b>\n  <i>${esc(c.why ?? "")}${c.competency_code ? ` [${esc(competencyName(c.competency_code))}]` : ""}</i>`).join("\n");
   const msg = `📊 <b>${skill === "writing" ? "Écrit" : "Oral"} — CLB ${clb} · ${g.score_20 ?? "–"}/20</b>\n<i>${esc(crit)}</i>\n\n` +
     (g.transcript && skill === "speaking" && sub.task_type?.startsWith("interview") !== true ? `🗣 <i>${esc(g.transcript)}</i>\n\n` : "") +
     `✅ <b>Version corrigée</b>\n${esc(g.corrected_text ?? "")}\n\n${corr ? `🔧 <b>Corrections</b>\n${corr}\n\n` : ""}` +
     `💪 ${esc((g.strengths ?? []).join("; "))}\n🎯 ${esc((g.next_focus ?? []).map(competencyName).join("; "))}\n\n${esc(g.feedback_en ?? "")}` +
     (added ? `\n\n🃏 ${added} cards from your mistakes.` : "");
   for (const chunk of splitTelegram(msg)) await sendMessage(chatId, chunk);
+  const { onItemDone } = await import("./deliver.js");
+  await onItemDone(String(sub.task_type).startsWith("interview") ? "interview" : skill);
 }
 
 /** Productive skill estimate: recency-weighted mean of the last 6 clb_sub, confidence from count & spread. */

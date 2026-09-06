@@ -1,7 +1,7 @@
 // Telegram webhook: commands, buttons, typed answers (cards / checks / writing), voice (checks / speaking / interview).
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { waitUntil } from "@vercel/functions";
-import { sql, one, getLearner, kvGet, kvDel, logActivity } from "../lib/db.js";
+import { sql, one, getLearner, kvGet, kvSet, kvDel, logActivity } from "../lib/db.js";
 import { sendMessage, answerCallback, editMessage, downloadFile, esc } from "../lib/telegram.js";
 import * as srs from "../lib/srs.js";
 import * as checks from "../lib/checks.js";
@@ -10,7 +10,8 @@ import { sendDrill, startSpotCheck, authorDrill } from "../lib/drills.js";
 import { sendListeningSet, sendReadingSet, sendWritingTask, sendSpeakingTask, startInterview, sendGrammarBrief, startGrammarTest } from "../lib/generate.js";
 import { gradeWriting, gradeSpeaking, finishInterview } from "../lib/grade.js";
 import { buildPlan } from "../lib/planner.js";
-import { sendMorningCard, sendSlot } from "../lib/deliver.js";
+import { sendMorningCard, sendSlot, sendQueued } from "../lib/deliver.js";
+import { advance, clearAll, queueInfo } from "../lib/flow.js";
 import { sendProgress } from "../lib/progress.js";
 import { teachable } from "../lib/grammar.js";
 import { tutor, ask, COMPETENCIES, pingModels } from "../lib/coach.js";
@@ -51,19 +52,19 @@ async function onMessage(m: any) {
     const bytes = await downloadFile(f.file_id);
     const mime = f.mime_type ?? "audio/ogg";
     if (await checks.answer({ audio: { data: bytes, mime } })) return;          // voice item in a check
-    return gradeSpeaking(chatId, bytes, mime, f.file_id, f.duration);
+    return gradeSpeaking(chatId, bytes, mime, f.file_id, f.duration);         // interview turn, speaking task, or free speaking
   }
   if (!text) return;
   if (text.startsWith("/")) return onCommand(chatId, text);
 
-  // typed answers first: card session, then check session
-  if (await srs.handleTyped(chatId, text)) return;
+  // 1. an open check consumes typed answers; 2. then an open card session
   if (await checks.answer({ text })) return;
+  if (await srs.handleTyped(chatId, text)) return;
 
   const awaiting = await kvGet<any>("awaiting");
+  if (await kvGet("interview_session")) { await sendMessage(chatId, "🎙 The interview is by voice — hold the mic and answer, or tap ⏹ End interview."); return; }
   if (awaiting?.kind === "writing") return gradeWriting(chatId, text);
-  if (awaiting?.kind === "interview") { await sendMessage(chatId, "Answer by voice for the interview (typed answers aren't graded for speaking)."); return; }
-  if (awaiting?.kind === "checkin" || /\b\d{1,3}\s*(min|minutes|h|hour)/i.test(text)) return parseAndLog(chatId, text);
+  if (awaiting?.kind === "checkin" && !looksFrench(text) && /\b\d{1,3}\s*(min|minutes|h|hours?)\b/i.test(text)) return parseAndLog(chatId, text);
   if (looksFrench(text)) return gradeWriting(chatId, text);
   await sendMessage(chatId, esc(await tutor(text)));
 }
@@ -77,7 +78,7 @@ async function onCommand(chatId: number, text: string) {
     case "/start":
       return sendMessage(chatId, `👋 Salut ! I'm your TCF Canada coach. Chat id <code>${chatId}</code>.\n${l.placement_done ? "/today for the plan." : "Start with /placement (12 items, ~10 min) so the planner knows your level."}`);
     case "/help":
-      return sendMessage(chatId, "/today /replan /progress /placement /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/codes (grammar codes) · /exam YYYY-MM-DD · /log 25 min podcast · /skip\nAny voice note = speaking feedback; any French text = writing feedback; English question = tutor.");
+      return sendMessage(chatId, "/today /replan /progress /placement /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/codes (grammar codes) · /exam YYYY-MM-DD · /log 25 min podcast · /skip (abandon current item) · /next\nAny voice note = speaking feedback; any French text = writing feedback; English question = tutor.");
     case "/placement": {
       await sendMessage(chatId, "Building your placement test…");
       const items = await checks.authorPlacement();
@@ -94,8 +95,9 @@ async function onCommand(chatId: number, text: string) {
     case "/review": return srs.startSession(chatId, Number(args[0]) || 15, "micro");
     case "/lesson": {
       const n = Number(args[0]);
-      const u = n ? await one`SELECT id FROM resource_units WHERE resource_id = 'assimil' AND seq = ${n}` : await nextUnit("assimil");
-      if (!u) return sendMessage(chatId, "No Assimil unit loaded — run npm run assimil:chunk / assimil:load.");
+      const u = n ? await one`SELECT id FROM resource_units WHERE resource_id IN ('assimil','coach_lessons') AND seq = ${n} ORDER BY (resource_id = 'assimil') DESC LIMIT 1`
+                  : (await nextUnit("assimil")) ?? (await nextUnit("coach_lessons"));
+      if (!u) return sendMessage(chatId, "No lesson available yet.");
       return sendUnit(chatId, Number(u.id), "patrol", "study");
     }
     case "/drill": {
@@ -120,10 +122,18 @@ async function onCommand(chatId: number, text: string) {
     case "/interview": return startInterview(chatId, args[0] === "s3" ? "tcf_s3" : "tcf_s1");
     case "/progress": return sendProgress(chatId);
     case "/log": return parseAndLog(chatId, args.join(" "));
-    case "/skip": await kvDel("awaiting"); await kvDel("check_session"); await kvDel("srs_session"); return sendMessage(chatId, "Cleared.");
+    case "/skip": {
+      const q = await queueInfo();
+      await clearAll();
+      await sendMessage(chatId, "Cleared the current item/test.");
+      if (q?.items?.length) { await kvSet("slot_queue", { ...q, current: undefined }, 8 * 60); return advance(sendQueued); }
+      return;
+    }
+    case "/next": return (await advance(sendQueued)) ? undefined : sendMessage(chatId, "Nothing queued.");
     case "/exam": {
       if (!args[0]) return sendMessage(chatId, `Exam date: ${l.exam_date ?? "not set"}. /exam 2027-05-15`);
-      await sql`UPDATE learner SET exam_date = ${args[0]} WHERE id = 1`;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(args[0])) return sendMessage(chatId, "Use YYYY-MM-DD, e.g. /exam 2027-05-15");
+      await sql`UPDATE learner SET exam_date = ${args[0]}::date WHERE id = 1`;
       return sendMessage(chatId, `Exam date set: ${args[0]}. FSRS intervals are now capped at that horizon.`);
     }
     default: return sendMessage(chatId, "Unknown command — /help");
@@ -138,22 +148,28 @@ async function onCallback(q: any) {
   const [kind, a, b, c] = data.split(":");
 
   if (kind === "srs") return srs.handleCallback(chatId, mid, data);
+  if (kind === "q" && a === "next") { if (!(await advance(sendQueued))) await sendMessage(chatId, "Nothing queued."); return; }
   if (kind === "chk") {
-    if (a === "mcq") return checks.answer({ mcq: Number(b), messageId: mid });
-    if (a === "skip") return checks.answer({ skip: true });
+    if (a === "mcq") return checks.answer({ pos: Number(b), mcq: Number(c), messageId: mid });
+    if (a === "skip") return checks.answer({ pos: b !== undefined ? Number(b) : undefined, skip: true });
     if (a === "slow") return checks.replaySlow();
   }
   if (kind === "unit") {
-    if (a === "check") return startUnitCheck(chatId, Number(b), "patrol", c ? Number(c) : undefined);
+    if (a === "check") { const [, , , dId, env] = data.split(":"); return startUnitCheck(chatId, Number(b), env && env !== "undefined" ? env : "patrol", Number(dId) || undefined); }
     if (a === "notes") return sendNotes(chatId, Number(b));
   }
   if (kind === "drill" && a === "spot") return startSpotCheck(chatId, Number(b), c ? Number(c) : undefined);
   if (kind === "gram" && a === "test") return startGrammarTest(chatId, b, c ? Number(c) : undefined);
   if (kind === "interview" && a === "end") return finishInterview(chatId);
-  if (kind === "skip") {
-    await sql`UPDATE deliveries SET status='skipped' WHERE plan_date=${localDate(l.tz)} AND status='sent' AND payload::text LIKE ${"%" + a + "%"}`;
-    await kvDel("awaiting");
-    return editMessage(chatId, mid, `⏭ ${esc(a)} skipped — the planner sees this.`);
+  if (kind === "skip") {   // skip:writing | skip:speaking — abandon that task only, move the slot on
+    const aw = await kvGet<any>("awaiting");
+    if (aw?.kind === a) await kvDel("awaiting");
+    if (aw?.submission_id) await sql`DELETE FROM submissions WHERE id = ${aw.submission_id} AND graded_at IS NULL`;
+    await editMessage(chatId, mid, `⏭ ${esc(a)} skipped — the planner sees this.`);
+    await logActivity(localDate(l.tz), "seated", `skipped_${a}`, 0, true);
+    const q = await queueInfo();
+    if (q?.current?.type === a) await advance(sendQueued);
+    return;
   }
   if (kind === "checkin" && a === "done") { await kvDel("awaiting"); return editMessage(chatId, mid, "🌙 Bonne nuit."); }
   if (kind === "slot") {
@@ -162,6 +178,8 @@ async function onCallback(q: any) {
     const p = await one`SELECT plan FROM plans WHERE plan_date = ${date}`;
     const slot = p?.plan?.slots?.find((s: any) => s.environment === a);
     if (!slot) return sendMessage(chatId, "That slot isn't in today's plan.");
+    const sentAlready = await one`SELECT id, status FROM deliveries WHERE plan_date=${date} AND environment=${a}::environment AND status IN ('sent','sending','completed') ORDER BY scheduled_at DESC LIMIT 1`;
+    if (sentAlready) return sendMessage(chatId, sentAlready.status === "completed" ? "That slot is already done today." : "That slot was already sent — scroll up, or tap ⏭ Next item / use /next.", [[{ text: "⏭ Next item", callback_data: "q:next" }]]);
     const d = await one`SELECT id FROM deliveries WHERE plan_date=${date} AND environment=${a}::environment AND status='pending' ORDER BY scheduled_at LIMIT 1`;
     if (d) await sql`UPDATE deliveries SET status='sent', sent_at=now() WHERE id=${d.id}`;
     return sendSlot(chatId, a, slot.items, slot.minutes, d ? Number(d.id) : undefined);
@@ -175,7 +193,7 @@ async function parseAndLog(chatId: number, text: string) {
   if (!p.entries?.length) return sendMessage(chatId, "No minutes found. Try: /log 25 min podcast driving");
   for (const e of p.entries) await logActivity(localDate(l.tz), ["patrol", "driving", "seated", "micro"].includes(e.environment) ? e.environment : "seated", e.activity, e.minutes, false);
   await kvDel("awaiting");
-  return sendMessage(chatId, `Logged (reported): ${p.entries.map((e) => `${e.minutes} min ${e.activity} (${e.environment})`).join(", ")}.`);
+  return sendMessage(chatId, `Logged (reported): ${p.entries.map((e) => `${Number(e.minutes) || 0} min ${esc(e.activity)} (${esc(e.environment)})`).join(", ")}.`);
 }
 
 const looksFrench = (t: string) => /[àâçéèêëîïôûùüÿœ]/i.test(t) || /\b(je|tu|il|elle|nous|vous|ils|est|suis|les|des|une|pas|avec|pour|dans|que|qui|bonjour|merci)\b/i.test(t);

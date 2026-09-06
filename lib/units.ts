@@ -1,6 +1,6 @@
 // Resource router runtime: materialise units (Assimil lessons, podcast/news episodes), render them for an
 // environment, and hand off to the gate check. A unit only advances through unit_checks.
-import { sql, one, json, getLearner } from "./db.js";
+import { sql, one, json, getLearner, kvGet } from "./db.js";
 import { sendMessage, sendVoice, sendVoiceById, sendChatAction, esc, type Keyboard } from "./telegram.js";
 import { speakDialogue } from "./tts.js";
 import { ask } from "./coach.js";
@@ -84,26 +84,28 @@ const pick = (xml: string, tag: string) => { const m = xml.match(new RegExp(`<${
 const strip = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
 
 /** Render a unit for an environment. mode: study (text + audio + gate button) | replay (audio only, shadowing) | active (EN lines -> FR). */
-export async function sendUnit(chatId: number, unitId: number, env: string, mode: "study" | "replay" | "active" = "study") {
+export async function sendUnit(chatId: number, unitId: number, env: string, mode: "study" | "replay" | "active" = "study", deliveryId?: number) {
   const u = await getUnit(unitId);
   if (!u) return sendMessage(chatId, `Unit ${unitId} not found.`);
   await sql`UPDATE resource_units SET status = CASE WHEN status = 'unseen' THEN 'scheduled' ELSE status END, last_used = now() WHERE id = ${unitId}`;
-  if (u.payload?.dialogue) return sendAssimil(chatId, u, env, mode);
-  return sendEpisode(chatId, u, env);
+  const cb = `unit:check:${unitId}:${deliveryId ?? 0}:${env}`;
+  if (u.payload?.dialogue) return sendAssimil(chatId, u, env, mode, cb);
+  return sendEpisode(chatId, u, env, cb);
 }
 
-async function sendAssimil(chatId: number, u: any, env: string, mode: "study" | "replay" | "active") {
+async function sendAssimil(chatId: number, u: any, env: string, mode: "study" | "replay" | "active", cb: string) {
   const d: { fr: string; en: string }[] = u.payload.dialogue ?? [];
   const isRevision = !d.length;
   if (mode === "active") {
     await sendMessage(chatId, `🔁 <b>Active wave — Leçon ${u.seq}</b>\nTranslate each line into French, then take the check.\n\n${d.map((l, i) => `${i + 1}. ${esc(l.en)}`).join("\n")}`,
-      [[{ text: "🧪 Check me", callback_data: `unit:check:${u.id}` }]]);
+      [[{ text: "🧪 Check me", callback_data: cb }]]);
     return;
   }
   await sendChatAction(chatId, "record_voice");
   if (mode === "replay") {
     if (u.audio_normal) await sendVoiceById(chatId, u.audio_normal, `🔁 Leçon ${u.seq} — ${esc(u.title ?? "")}. Shadow it: speak with the voice, match rhythm and liaison.`);
     else { const mp3 = await speakDialogue(d, "normal"); const id = await sendVoice(chatId, mp3, `🔁 Leçon ${u.seq} — shadow it`); await sql`UPDATE resource_units SET audio_normal = ${id} WHERE id = ${u.id}`; }
+    await sendMessage(chatId, "Shadowed it?", [[{ text: "✅ Done", callback_data: "q:next" }]]);   // replay has no check: learner advances the slot
     return;
   }
   const header = `📖 <b>${u.resource_id === "assimil" ? "Assimil" : "Leçon"} ${u.seq} — ${esc(u.title ?? "")}</b>${isRevision ? "\n<i>Révision</i>" : `\n<i>${env === "patrol" ? "Listen ×2 while walking, read along, repeat aloud." : "Listen, read, repeat."} Then tap Check.</i>`}`;
@@ -124,16 +126,16 @@ async function sendAssimil(chatId: number, u: any, env: string, mode: "study" | 
       if (n) await sendMessage(chatId, `🃏 ${n} cards from this lesson added.`);
     }
   }
-  const kb: Keyboard = [[{ text: "🧪 Check me (5 items)", callback_data: `unit:check:${u.id}` }], [{ text: "📝 Notes & exercises", callback_data: `unit:notes:${u.id}` }]];
-  await sendMessage(chatId, isRevision ? "Read the revision notes, then:" : "When you've listened twice:", isRevision ? [[{ text: "🧪 Check me", callback_data: `unit:check:${u.id}` }]] : kb);
+  const kb: Keyboard = [[{ text: "🧪 Check me (5 items)", callback_data: cb }], [{ text: "📝 Notes & exercises", callback_data: `unit:notes:${u.id}` }]];
+  await sendMessage(chatId, isRevision ? "Read the revision notes, then:" : "When you've listened twice:", isRevision ? [[{ text: "🧪 Check me", callback_data: cb }]] : kb);
 }
 
-async function sendEpisode(chatId: number, u: any, env: string) {
+async function sendEpisode(chatId: number, u: any, env: string, cb: string) {
   const p = u.payload ?? {};
   const vocab = (p.key_vocab ?? []).map((v: any) => `• <b>${esc(v.fr)}</b> — ${esc(v.en)}`).join("\n");
   await sendMessage(chatId,
-    `🎙 <b>${esc(u.title ?? u.resource_id)}</b>\n${p.mp3 ?? p.url ?? ""}\n\n<i>${esc(p.summary ?? "")}</i>\n\n📚 Before listening:\n${vocab}\n\n<i>Listen ${env === "driving" ? "in the car" : "on patrol"}; the check asks you to recall it in French.</i>`,
-    [[{ text: "🧪 Check me", callback_data: `unit:check:${u.id}` }]]);
+    `🎙 <b>${esc(u.title ?? u.resource_id)}</b>\n${esc(p.mp3 ?? p.url ?? "")}\n\n<i>${esc(p.summary ?? "")}</i>\n\n📚 Before listening:\n${vocab}\n\n<i>Listen ${env === "driving" ? "in the car" : "on patrol"}; the check asks you to recall it in French.</i>`,
+    [[{ text: "🧪 Check me", callback_data: cb }]]);
 }
 
 export async function sendNotes(chatId: number, unitId: number) {
@@ -149,6 +151,7 @@ export async function startUnitCheck(chatId: number, unitId: number, env: string
   if (!u) return;
   const last = await one`SELECT items FROM unit_checks WHERE unit_id = ${unitId} AND NOT passed ORDER BY created_at DESC LIMIT 1`;
   const missed = last ? (last.items as any[]).filter((i) => !i.correct && i.expected).map((i) => i.expected) : [];
+  if (await kvGet("check_session")) return sendMessage(chatId, "⏳ Finish the current check first (or /skip).");
   await sendMessage(chatId, "✍️ Writing your check…");
   const { items, check_type } = await authorUnitGate(u, env, missed);
   if (!items.length) return sendMessage(chatId, "Couldn't build a check for this unit — try again.");

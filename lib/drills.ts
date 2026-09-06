@@ -1,6 +1,6 @@
 // Driving drills: DRILL AUTHOR writes a prompt→pause→answer script for target competencies + due cards,
 // tts.renderDrill assembles one MP3, the post-drive spot check turns it into evidence.
-import { sql, one, json, getLearner, currentClb } from "./db.js";
+import { sql, one, json, getLearner, currentClb, kvSet, kvDel } from "./db.js";
 import { sendMessage, sendVoice, sendVoiceById, sendChatAction, esc } from "./telegram.js";
 import { ask, competencyName, COMPETENCIES } from "./coach.js";
 import { renderDrill, type DrillStep } from "./tts.js";
@@ -32,6 +32,14 @@ Return {"title","script":[{"type":"teach|prompt|answer|recap","en","fr","pause_s
   return id;
 }
 
+/** Render the audio ahead of time (nightly) so the driving delivery is instant. */
+export async function prerenderDrill(drillId: number) {
+  const d = await one`SELECT script, audio_file FROM drills WHERE id = ${drillId}`;
+  if (!d || d.audio_file) return;
+  const { seconds } = await renderDrill(d.script, (await getLearner()).settings?.drill_pause_seconds ?? 4);   // segments land in tts_cache
+  await sql`UPDATE drills SET duration_s = ${seconds} WHERE id = ${drillId}`;
+}
+
 /** Render (or reuse) and send the drill as a voice note; then arm the spot check. */
 export async function sendDrill(chatId: number, drillId: number, deliveryId?: number) {
   const d = await one`SELECT * FROM drills WHERE id = ${drillId}`;
@@ -45,6 +53,7 @@ export async function sendDrill(chatId: number, drillId: number, deliveryId?: nu
     await sql`UPDATE drills SET audio_file = ${fileId}, duration_s = ${seconds} WHERE id = ${drillId}`;
   }
   await sql`UPDATE drills SET times_played = times_played + 1 WHERE id = ${drillId}`;
+  await kvSet("spot_pending", { drill_id: drillId, delivery_id: deliveryId ?? null }, 24 * 60);   // auto-runs at the next card slot if not taken
   await sendMessage(chatId, "After the drive:", [[{ text: "🧪 Spot check (5)", callback_data: `drill:spot:${drillId}${deliveryId ? ":" + deliveryId : ""}` }]]);
 }
 
@@ -52,6 +61,6 @@ export async function startSpotCheck(chatId: number, drillId: number, deliveryId
   const d = await one`SELECT title FROM drills WHERE id = ${drillId}`;
   const kv = await one`SELECT v FROM kv WHERE k = ${"drill_spot:" + drillId}`;
   const items: Item[] = kv?.v ?? [];
-  if (!items.length) return sendMessage(chatId, "No spot check stored for this drill.");
+  if (!items.length) { await kvDel("spot_pending"); return sendMessage(chatId, "No spot check stored for this drill."); }
   await startCheck({ chatId, type: "drill_spot", ref: { table: "drills", id: drillId }, title: `Spot check — ${d?.title ?? "drill"}`, items, env: "micro", pass_pct: 80, meta: { delivery_id: deliveryId } });
 }

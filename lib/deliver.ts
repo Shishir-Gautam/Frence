@@ -1,12 +1,13 @@
-// Renders scheduled deliveries into Telegram: morning card, environment slots, check-in, weekly.
-import { sql, one, getLearner, kvSet } from "./db.js";
+// Renders scheduled deliveries into Telegram: morning card, environment slots (one item at a time), check-in.
+import { sql, one, getLearner, kvGet, kvSet } from "./db.js";
 import { sendMessage, esc, type Keyboard } from "./telegram.js";
 import { sendUnit } from "./units.js";
-import { authorDrill, sendDrill } from "./drills.js";
+import { authorDrill, sendDrill, startSpotCheck } from "./drills.js";
 import { sendListeningSet, sendReadingSet, sendWritingTask, sendSpeakingTask, startInterview, sendGrammarBrief } from "./generate.js";
 import { startSession } from "./srs.js";
 import { startCheck, authorSurprise } from "./checks.js";
-import { competencyName } from "./coach.js";
+import { competencyName, validCode } from "./coach.js";
+import { startQueue, advance, itemDone, queueInfo, busy } from "./flow.js";
 import type { Plan, PlanItem } from "./planner.js";
 
 const ENV_LABEL: Record<string, string> = { patrol: "🚶 Patrol", driving: "🚗 Driving", seated: "🪑 Seated", micro: "🃏 Cards" };
@@ -15,10 +16,21 @@ export async function runDelivery(d: { id: number; slot: string; environment: st
   const chatId = (await getLearner()).chat_id!;
   switch (d.slot) {
     case "morning_card": return sendMorningCard(chatId, d.plan_date, d.payload.plan as Plan);
-    case "srs": return startSession(chatId, d.payload.items?.[0]?.count ?? 15, "micro", "🃏 Card time — type the French.");
+    case "srs": return sendSrsSlot(chatId, d.payload.items?.[0]?.count ?? 15);
     case "checkin": return sendCheckin(chatId, d.plan_date);
     default: return sendSlot(chatId, d.environment, d.payload.items as PlanItem[], d.payload.minutes, d.id);
   }
+}
+
+/** Card slot: an untaken post-drive spot check goes first (cards are queued behind it). */
+async function sendSrsSlot(chatId: number, count: number) {
+  const spot = await kvGet<{ drill_id: number; delivery_id: number | null }>("spot_pending");
+  if (spot && !(await busy())) {
+    await kvSet("srs_deferred", { chatId, count }, 180);
+    await sendMessage(chatId, "🚗 First, the spot check from your drive — cards right after.");
+    return startSpotCheck(chatId, spot.drill_id, spot.delivery_id ?? undefined);
+  }
+  return startSession(chatId, count, "micro", "🃏 Card time — type the French.");
 }
 
 export async function sendMorningCard(chatId: number, date: string, plan: Plan) {
@@ -28,23 +40,50 @@ export async function sendMorningCard(chatId: number, date: string, plan: Plan) 
     [{ text: "🚶 Patrol now", callback_data: "slot:patrol" }, { text: "🃏 Cards", callback_data: "slot:srs" }],
     [{ text: "🚗 Driving now", callback_data: "slot:driving" }, { text: "🪑 Seated now", callback_data: "slot:seated" }],
   ];
-  await sendMessage(chatId, `☀️ <b>Plan du ${date}</b> — ~${total} min\n🎯 <i>${esc(plan.focus)}</i>\n\n${lines}\n\n${esc(plan.message_to_learner)}`, kb);
+  const learner = await getLearner();
+  const hint = learner.placement_done ? "" : "\n\n⚠️ Do /placement first (10 min) so the plan matches your real level.";
+  await sendMessage(chatId, `☀️ <b>Plan du ${date}</b> — ~${total} min\n🎯 <i>${esc(plan.focus)}</i>\n\n${lines}\n\n${esc(plan.message_to_learner)}${hint}`, kb);
 }
 
+/** Deliver a slot one item at a time; the next item is sent when the current one completes (or ⏭ Next item). */
 export async function sendSlot(chatId: number, env: string, items: PlanItem[], minutes?: number, deliveryId?: number) {
-  await sendMessage(chatId, `${ENV_LABEL[env] ?? env}${minutes ? ` · ${minutes} min` : ""}\n${items.map((i) => "• " + esc(label(i))).join("\n")}`);
-  for (const it of items) {
-    try { await sendItem(chatId, it, env, deliveryId); }
-    catch (e: any) { console.error(e); await sendMessage(chatId, `⚠️ Couldn't build "${esc(label(it))}": ${esc(String(e.message ?? e)).slice(0, 200)}`); }
+  const existing = await queueInfo();
+  if (existing?.items?.length || existing?.current) {
+    await sendMessage(chatId, `⏳ You still have "${esc(label(existing.current))}" open from the ${ENV_LABEL[existing.env] ?? existing.env} slot. Finish it, tap ⏭ Next item, or /skip.`,
+      [[{ text: "⏭ Next item", callback_data: "q:next" }]]);
+    return;
   }
+  await sendMessage(chatId, `${ENV_LABEL[env] ?? env}${minutes ? ` · ${minutes} min` : ""}\n${items.map((i) => "• " + esc(label(i))).join("\n")}\n<i>One at a time — the next arrives when you finish this one.</i>`);
+  await startQueue({ chatId, env, deliveryId, items: [...items] }, sendQueued);
+}
+
+/** Send the current queue item (bound to the queue's chat/env/delivery). */
+export async function sendQueued(it: PlanItem) {
+  const q = await queueInfo();
+  if (!q) return;
+  await sendItem(q.chatId, it, q.env, q.deliveryId);
+  // items with no completion event of their own advance immediately
+  if (it.type === "drill") await advance(sendQueued);
+}
+
+/** Completion hook called by checks / grader / cards. Only advances when the finished thing is the current queue item. */
+export async function onItemDone(kind: string) {
+  const q = await queueInfo();
+  const cur = q?.current?.type;
+  const matches: Record<string, string[]> = {
+    unit_gate: ["unit"], grammar_test: ["grammar_brief"], listening_set: ["listening_set"], reading_set: ["reading_set"], surprise: ["surprise_test"],
+    writing: ["writing"], speaking: ["speaking"], interview: ["interview", "speaking"], srs: ["srs"],
+  };
+  const ok = !!cur && (matches[kind] ?? []).includes(cur);
+  await itemDone(ok ? sendQueued : async () => {}, (chatId, n) => startSession(chatId, n, "micro", "🃏 Now your queued cards."));
 }
 
 export async function sendItem(chatId: number, it: PlanItem, env: string, deliveryId?: number) {
   switch (it.type) {
-    case "unit": return sendUnit(chatId, it.unit_id, env, it.mode ?? "study");
+    case "unit": return sendUnit(chatId, it.unit_id, env, it.mode ?? "study", deliveryId);
     case "drill": {
-      // reuse a recent unplayed drill for the same codes, else author a new one
-      const existing = await one`SELECT id FROM drills WHERE competency_codes = ${it.competency_codes} AND times_played = 0 AND created_at > now() - interval '3 days' ORDER BY id DESC LIMIT 1`;
+      const existing = it.drill_id ? await one`SELECT id FROM drills WHERE id = ${it.drill_id}` :
+        await one`SELECT id FROM drills WHERE competency_codes = ${it.competency_codes} AND times_played = 0 AND created_at > now() - interval '3 days' ORDER BY id DESC LIMIT 1`;
       const id = existing ? Number(existing.id) : await authorDrill({ method: it.method, competency_codes: it.competency_codes, minutes: it.minutes });
       return sendDrill(chatId, id, deliveryId);
     }
@@ -71,23 +110,26 @@ export async function sendCheckin(chatId: number, date: string) {
   const m = await one`SELECT COALESCE(SUM(minutes),0)::int AS mins, COALESCE(SUM(minutes) FILTER (WHERE verified),0)::int AS verified FROM activity_log WHERE log_date = ${date}`;
   const d = await sql`SELECT slot, status FROM deliveries WHERE plan_date = ${date} AND slot NOT IN ('morning_card','checkin')`;
   const completed = d.filter((x) => x.status === "completed").length, sent = d.filter((x) => ["sent", "completed"].includes(x.status)).length;
-  await kvSet("awaiting", { kind: "checkin", date }, 180);
+  const aw = await kvGet<any>("awaiting");
+  if (!aw || aw.kind === "checkin") await kvSet("awaiting", { kind: "checkin", date }, 120);   // never clobber a pending writing/speaking task
   await sendMessage(chatId,
-    `🌙 <b>Check-in</b> — <b>${m?.verified ?? 0} min verified</b> (${m?.mins ?? 0} logged) · ${completed}/${sent} slots checked.\nUnverified time (a podcast you just listened to)? Reply e.g. <code>25 min innerfrench in the car</code> — it's logged as reported, not verified.\n<i>Tomorrow's plan lands at 06:30.</i>`,
+    `🌙 <b>Check-in</b> — <b>${m?.verified ?? 0} min verified</b> (${m?.mins ?? 0} logged) · ${completed}/${sent} slots completed.\nExtra time to report (a podcast in the car)? Use <code>/log 25 min podcast driving</code> — it's logged as reported, not verified.\n<i>Tomorrow's plan lands at 06:30.</i>`,
     [[{ text: "😴 Done for today", callback_data: "checkin:done" }]]);
 }
 
-export function label(i: PlanItem): string {
+export function label(i: PlanItem | undefined): string {
+  if (!i) return "";
   switch (i.type) {
     case "unit": return `${i.resource_id === "assimil" ? "Assimil" : i.resource_id === "coach_lessons" ? "Lesson" : i.resource_id}${i.title ? ` — ${i.title}` : ` #${i.unit_id}`}${i.mode && i.mode !== "study" ? ` (${i.mode})` : ""}`;
-    case "drill": return `Drill (${i.method.replace("_", " ")}): ${i.competency_codes.map(competencyName).join(", ")}`;
+    case "drill": return `Drill (${String(i.method ?? "pimsleur").replace("_", " ")}): ${(i.competency_codes ?? []).filter(validCode).map(competencyName).join(", ")}`;
     case "grammar_brief": return `Grammar: ${competencyName(i.competency_code)}`;
     case "listening_set": return "TCF listening set";
     case "reading_set": return "TCF reading set";
-    case "writing": return `Writing ${i.task === "micro" ? "micro" : "TCF " + i.task.slice(4).toUpperCase()}`;
-    case "speaking": return `Speaking ${i.task === "micro" ? "micro" : "TCF " + i.task.slice(4).toUpperCase()}`;
-    case "interview": return `Interview (TCF ${i.task.slice(4).toUpperCase()})`;
+    case "writing": return `Writing ${i.task === "micro" ? "micro" : "TCF " + String(i.task).slice(4).toUpperCase()}`;
+    case "speaking": return `Speaking ${i.task === "micro" ? "micro" : "TCF " + String(i.task).slice(4).toUpperCase()}`;
+    case "interview": return `Interview (TCF ${String(i.task).slice(4).toUpperCase()})`;
     case "srs": return `${i.count} cards`;
     case "surprise_test": return "Surprise retention test";
+    default: return String((i as any).type ?? "item");
   }
 }

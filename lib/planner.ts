@@ -1,14 +1,15 @@
 // Nightly planner: snapshot (grid, FSRS load, resources, history) -> PLANNER role -> plan -> timed deliveries per environment.
 import { sql, one, json, getLearner, plannerSnapshot } from "./db.js";
-import { ask } from "./coach.js";
-import { teachable, decayAll } from "./grammar.js";
+import { ask, validCode } from "./coach.js";
+import { teachable } from "./grammar.js";
 import { nextUnit } from "./units.js";
+import { authorDrill, prerenderDrill } from "./drills.js";
 import { localToUtc, localDate, localWeekday } from "./time.js";
 import { updateReceptiveEstimates } from "./grade.js";
 
 export type PlanItem =
   | { type: "unit"; resource_id: string; unit_id: number; title?: string; mode?: "study" | "replay" | "active" }
-  | { type: "drill"; method: "pimsleur" | "michel_thomas" | "language_transfer"; competency_codes: string[]; minutes?: number }
+  | { type: "drill"; method: "pimsleur" | "michel_thomas" | "language_transfer"; competency_codes: string[]; minutes?: number; drill_id?: number }
   | { type: "grammar_brief"; competency_code: string }
   | { type: "listening_set" } | { type: "reading_set" }
   | { type: "writing"; task: "micro" | "tcf_w1" | "tcf_w2" | "tcf_w3" }
@@ -36,7 +37,6 @@ Rules: total 120-180 min. Daily: one drill, one graded production item (writing/
 export async function buildPlan(forDate?: string): Promise<{ date: string; plan: Plan }> {
   const learner = await getLearner();
   const date = forDate ?? localDate(learner.tz, 1);
-  await decayAll();
   await updateReceptiveEstimates();
   const snap = await plannerSnapshot();
   // make sure each active feed/course has a concrete next unit the planner can reference
@@ -83,6 +83,7 @@ ${CONTRACT}`;
 
   const plan = await ask<Plan>("PLANNER", user, { temperature: 0.35 });
   validate(plan, next, teach, snap.current_clb);
+  if (!forDate) await preauthor(plan);        // nightly run only; /today and /replan stay fast
   await sql`INSERT INTO plans (plan_date, plan, inputs_digest) VALUES (${date}, ${json(plan)}::jsonb, ${json({ clb: snap.current_clb, fsrs: snap.fsrs_load, teach: teach.map((t: any) => t.code), next })}::jsonb)
             ON CONFLICT (plan_date) DO UPDATE SET plan = EXCLUDED.plan, inputs_digest = EXCLUDED.inputs_digest, created_at = now()`;
   await materialise(date, plan);
@@ -96,6 +97,14 @@ function validate(plan: Plan, next: any[], teach: any[], clb: Record<string, { c
     s.items = (s.items ?? []).flatMap((it): PlanItem[] => {
       if (it.type === "unit") { const n = next.find((x) => x.unit_id === it.unit_id); return n ? [{ ...it, title: n.title ?? it.title }] : []; }
       if (it.type === "grammar_brief") return codes.has(it.competency_code) ? [it] : [];
+      if (it.type === "drill") {
+        const cc = (it.competency_codes ?? []).filter(validCode).slice(0, 2);
+        if (!cc.length) cc.push(...(teach[0] ? [teach[0].code] : []));
+        if (!cc.length) return [];
+        const method = ["pimsleur", "michel_thomas", "language_transfer"].includes(it.method) ? it.method : "pimsleur";
+        return [{ ...it, method, competency_codes: cc, minutes: Math.min(25, Math.max(10, Number(it.minutes) || 18)) }];
+      }
+      if (it.type === "srs") return [{ type: "srs", count: Math.min(40, Math.max(5, Number(it.count) || 15)) }];
       if (it.type === "listening_set") return clb.listening.clb >= 3 ? [it] : [];
       if (it.type === "reading_set") return clb.reading.clb >= 3 ? [it] : [];
       if (it.type === "writing" && it.task !== "micro" && clb.writing.clb < 4) return [{ type: "writing", task: "micro" }];
@@ -110,8 +119,23 @@ function validate(plan: Plan, next: any[], teach: any[], clb: Record<string, { c
     const u = next.find((n) => n.resource_id === "assimil") ?? next.find((n) => n.resource_id === "coach_lessons");
     if (u) patrol.items.push({ type: "unit", resource_id: u.resource_id, unit_id: u.unit_id, title: u.title, mode: "study" });
   }
+  for (const s of plan.slots) {
+    if (s.time && !/^\d{2}:\d{2}$/.test(s.time)) delete s.time;
+    s.minutes = Math.max(5, Number(s.minutes) || 20);
+    if (!["patrol", "driving", "seated", "micro"].includes(s.environment)) s.environment = "seated";
+  }
   plan.slots = plan.slots.filter((s) => s.items.length);
+  plan.focus = String(plan.focus ?? ""); plan.message_to_learner = String(plan.message_to_learner ?? "");
   if (!plan.slots?.length) throw new Error("planner returned no slots");
+}
+
+/** Nightly: author + render tomorrow's drills now so the driving delivery is instant and can't time out. */
+export async function preauthor(plan: Plan) {
+  for (const s of plan.slots) for (const it of s.items) {
+    if (it.type !== "drill" || it.drill_id) continue;
+    try { it.drill_id = await authorDrill({ method: it.method, competency_codes: it.competency_codes, minutes: it.minutes }); await prerenderDrill(it.drill_id); }
+    catch (e) { console.error("preauthor drill", e); }
+  }
 }
 
 /** Plan -> deliveries (replaces pending ones for that date). */
@@ -119,14 +143,17 @@ export async function materialise(date: string, plan: Plan) {
   const learner = await getLearner();
   const s = learner.schedule;
   await sql`DELETE FROM deliveries WHERE plan_date = ${date} AND status = 'pending'`;
+  const already = await sql`SELECT slot, environment FROM deliveries WHERE plan_date = ${date} AND status <> 'pending'`;
+  const done = new Set(already.map((r) => `${r.environment}:${r.slot}`));
   const rows: { environment: string; slot: string; at: Date; payload: any }[] = [];
   const at = (hhmm: string) => localToUtc(date, hhmm, learner.tz);
   rows.push({ environment: "micro", slot: "morning_card", at: at(s.morning_card), payload: { plan } });
   const patrolTimes: string[] = Array.isArray(s.patrol) ? s.patrol : [s.patrol];
-  let patrolIdx = 0;
+  let patrolIdx = 0, srsExpanded = false;
   for (const sl of plan.slots) {
     if (sl.slot === "srs" || sl.environment === "micro") {
-      for (const t of s.srs as string[]) rows.push({ environment: "micro", slot: "srs", at: at(t), payload: { items: sl.items, minutes: sl.minutes } });
+      if (!srsExpanded) { srsExpanded = true; for (const t of s.srs as string[]) rows.push({ environment: "micro", slot: "srs", at: at(t), payload: { items: sl.items, minutes: sl.minutes } }); }
+      else if (sl.time) rows.push({ environment: "micro", slot: "srs", at: at(sl.time), payload: { items: sl.items, minutes: sl.minutes } });
     } else if (sl.environment === "patrol") {
       rows.push({ environment: "patrol", slot: "patrol", at: at(sl.time ?? patrolTimes[Math.min(patrolIdx++, patrolTimes.length - 1)]), payload: { items: sl.items, minutes: sl.minutes } });
     } else if (s[sl.environment]) {
@@ -134,7 +161,11 @@ export async function materialise(date: string, plan: Plan) {
     }
   }
   rows.push({ environment: "micro", slot: "checkin", at: at(s.checkin), payload: {} });
-  for (const r of rows)
+  // Re-planning mid-day: don't re-send slots that already went out, and don't queue up a backlog of past times
+  // (anything more than 20 min in the past is dropped; a re-plan for today is read with /today or the slot buttons).
+  const cutoff = Date.now() - 20 * 60000;
+  const fresh = rows.filter((r) => !isNaN(r.at.getTime()) && r.at.getTime() >= cutoff && !done.has(`${r.environment}:${r.slot}`));
+  for (const r of fresh)
     await sql`INSERT INTO deliveries (plan_date, environment, slot, scheduled_at, payload) VALUES (${date}, ${r.environment}::environment, ${r.slot}, ${r.at.toISOString()}, ${json(r.payload)}::jsonb)`;
-  return rows.length;
+  return fresh.length;
 }

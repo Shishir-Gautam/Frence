@@ -2,7 +2,7 @@
 
 A single-learner Telegram coach. A nightly **planner** reads your learner model (44-competency grammar grid, FSRS load, resource toolbox, graded history) and routes tomorrow's work across your three environments — **patrol** (active input), **driving** (prompt→pause→answer audio drills), **seated** (grammar + TCF output). Every unit ends in a **gate check** the bot authors and scores; every drive ends in a **spot check**; every writing/speaking task gets a **CLB sub-score (1–12)** from the TCF rubric; every correction becomes **weighted grammar evidence** that moves the mastery grid the planner reads the next night. Nothing advances on self-report.
 
-Stack: Telegram · Vercel functions (TypeScript) · Gemini 2.5 Flash (planning, examining, grading, TTS) · Postgres (Neon).
+Stack: Telegram · Vercel functions (TypeScript) · Gemini 3.x Flash (planning, examining, grading, TTS) · Postgres (Neon).
 
 ## Layout
 
@@ -40,7 +40,7 @@ scripts/smoke.ts          end-to-end test with Gemini + Telegram mocked (runs ag
 
 1. @BotFather → `/newbot` → token. Gemini key from AI Studio. Neon project → connection string.
 2. Push to a private GitHub repo → import in Vercel → paste `.env.example` variables → deploy.
-3. Open `https://<app>.vercel.app/api/setup?key=<CRON_SECRET>` once: applies schema, seeds 9 resources + 44 competencies, sets webhook + command menu.
+3. Open `https://<app>.vercel.app/api/setup?key=<CRON_SECRET>` once: applies schema, seeds 10 resources + 44 competencies, sets webhook + command menu.
 4. Locally (`.env` filled):
    ```
    npm i
@@ -58,15 +58,17 @@ scripts/smoke.ts          end-to-end test with Gemini + Telegram mocked (runs ag
 | time | environment | what happens |
 |---|---|---|
 | 06:30 | — | morning card: focus, slots, buttons to start any slot early |
-| 08:00 / 11:00 | patrol | Assimil lesson (text + 🐢/🐇 voice notes) or a podcast/news unit with pre-listening vocab → **Check me**: back-translation, dictation, transform, MCQ (80% to pass; misses become cards, fails come back tomorrow) |
+| 08:00 / 11:00 | patrol | Assimil lesson — or, until Assimil is loaded / you reach CLB 3, a bot-authored beginner lesson from a 16-step survival ladder — (text + 🐢/🐇 voice notes) → **Check me**: back-translation, dictation, transform, MCQ (80% to pass; misses become cards, fails come back tomorrow). Exam-style listening/reading sets only from CLB 3. |
 | 10:00 / 13:00 / 19:30 | micro | FSRS cards, **typed** — the bot checks the answer, maps it to Again/Hard/Good/Easy, reschedules |
 | 15:15 | driving | one MP3 drill (Pimsleur / Michel Thomas / Language Transfer structure) on 1–2 grid competencies, recycling due cards → **Spot check** (5 prompts) at the next micro slot |
-| 17:30 | seated | grammar brief + 6-item typed test (≤2 competencies), writing task (reply text) or speaking task / multi-turn interview (reply voice), reading set |
+| 17:30 | seated | grammar brief + 6-item typed test (≤2 competencies), writing task (reply text), speaking task / multi-turn interview (reply voice), reading set — delivered **one item at a time**; the next arrives when the current one is scored (or ⏭ Next item) |
 | 21:30 | — | check-in: verified vs reported minutes, slots completed |
 | 22:30 | — | planner: decay grid, refresh estimates, write tomorrow |
 | Sun | seated | surprise retention test from the last 3 weeks + weekly review |
 
-Any time: `/drill CODE [pimsleur|michel_thomas|language_transfer]`, `/grammar CODE`, `/interview s1|s3`, `/write w3`, `/speak s2`, `/listen`, `/read`, `/review`, `/progress`, `/codes`.
+Any time: `/drill CODE [pimsleur|michel_thomas|language_transfer]`, `/grammar CODE`, `/interview s1|s3`, `/write w3`, `/speak s2`, `/listen`, `/read`, `/review`, `/progress`, `/codes`, `/ping`. `/next` moves the slot on, `/skip` abandons the current item or test.
+
+Only one interactive thing runs at a time: a check pauses an open card session; a card slot that lands mid-check is queued and starts when the check ends. An untaken post-drive spot check runs at the next card slot. Re-planning during the day never re-sends slots that already went out.
 
 ## How the numbers move
 
