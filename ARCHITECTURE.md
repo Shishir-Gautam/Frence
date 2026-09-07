@@ -329,3 +329,363 @@ Priority 6: CURATOR role, content sequencing, resource attachment by module.
 - **No wider capability matrix.** Sparse by design (§3.5).
 - **No LLM in the selection path.** Authoring and grading only.
 - **No self-report progress.** State changes only through checks the bot administers.
+
+---
+
+# Part II — learning flow and resource plumbing
+
+Part I settled *who chooses*. This part settles *what arrives*: how input precedes output, where content comes
+from without manual data entry, and how retention rides alongside progression instead of fighting it.
+
+---
+
+## 10. Input before output — killing the interrogation trap
+
+### 10.1 The real diagnosis
+
+`lib/teach.ts` already does teach → practice → check, and it does it well. But it only exists **for lesson
+units**. Every other activity the bot can send is output-first:
+
+| activity | input phase today |
+|---|---|
+| lesson unit | ✅ teach → guided practice → check |
+| FSRS card, first ever sight of it | ❌ "Type the French" for a word you have never seen |
+| driving drill | ❌ prompt → pause → answer, cold |
+| drill spot check | ❌ pure recall |
+| grammar brief | ⚠️ explanation, then straight to a test |
+| listening / reading set | ❌ comprehension questions, no pre-teaching |
+| `/fr` say-it-in-French | ❌ produce, then get corrected |
+
+Six of seven paths demand output first. That is the interrogation feeling, and it is not a tone problem — it is
+a **missing phase in the activity contract**.
+
+### 10.2 The contract: three phases, or say why not
+
+The selector stops emitting "items" (`{type:"drill"}`) and starts emitting **activities** with a fixed shape:
+
+```ts
+// lib/activity.ts
+export type Activity = {
+  module_id: string;
+  skill: Skill;
+  env: Environment;
+  minutes: number;
+  why: string;                         // the selector rule that produced this — rendered to you
+  phases: {
+    input:   InputSpec | { skip: "already_met"; evidence: number };  // ← must be justified, not omitted
+    guided:  GuidedSpec;               // supported, hints on, NOT scored, NO evidence written
+    produce: ProduceSpec;              // scored, writes grammar_evidence + exam_evidence
+  };
+};
+
+export type InputSpec =
+  | { kind: "audio_snippet";  text_fr: string[]; gloss_en: string[]; repeats: 2 }
+  | { kind: "text";           body_fr: string; unknown_budget: number }
+  | { kind: "breakdown";      rule_en: string; worked: { fr: string; en: string; note: string }[] }
+  | { kind: "worked_example"; fr: string; en: string; walkthrough: string };
+```
+
+`input.skip` is allowed **only** with evidence attached, and the evidence is checked in code (§10.3). An
+activity that cannot justify skipping input gets one generated. This is the whole fix: the shape of the object
+makes the interrogation impossible to express.
+
+### 10.3 The exposure ledger — the gate that enforces it
+
+You cannot be tested on something you have not met. Today nothing records "met"; `grammar_evidence` only
+records *performance*. So:
+
+```sql
+-- Every time material is PRESENTED to you (not tested). The counterpart to grammar_evidence.
+CREATE TABLE IF NOT EXISTS exposures (
+  id          SERIAL PRIMARY KEY,
+  target_kind TEXT NOT NULL,          -- competency | card | module | pattern
+  target_id   TEXT NOT NULL,
+  kind        TEXT NOT NULL,          -- audio | text | breakdown | worked_example | dialogue
+  source_type TEXT, source_id INT,
+  env         environment,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_12_exposures ON exposures (target_kind, target_id, created_at DESC);
+```
+
+And one hard gate in the selector:
+
+```ts
+// lib/activity.ts — called on every produce phase before it is emitted
+const MIN_EXPOSURES = 2;
+const WINDOW_DAYS   = 21;
+
+export async function gateInput(a: Activity): Promise<Activity> {
+  const targets = produceTargets(a);                    // competency codes + card ids the produce phase touches
+  const cold: string[] = [];
+  for (const t of targets) {
+    const n = await one`SELECT COUNT(*)::int AS n FROM exposures
+                        WHERE target_kind = ${t.kind} AND target_id = ${t.id}
+                          AND created_at > now() - (${WINDOW_DAYS} || ' days')::interval`;
+    if (Number(n?.n ?? 0) < MIN_EXPOSURES) cold.push(t.id);
+  }
+  if (!cold.length) return a;                            // met recently enough — produce as planned
+  return { ...a, phases: { ...a.phases, input: await buildInput(a, cold) } };   // demote: teach it first
+}
+```
+
+Two consequences worth stating plainly: **a produce phase can never target cold material**, and **guided
+phases write exposures, never evidence** (that rule already holds in `teach.ts`'s practice step — it becomes
+universal).
+
+### 10.4 What "input" is, per environment
+
+Input is not a lecture. It is the smallest amount of *comprehensible French* that makes the following
+production possible.
+
+| env | input phase | length |
+|---|---|---|
+| patrol / walking | 6–8 natural sentences carrying the pattern, French → English gloss → French again, one voice note | 60–90s |
+| driving | same, but the pattern is *modelled answered* three times before the first prompt — Michel Thomas order, not Pimsleur cold-call | 90s |
+| seated | a 100–140 word text at i+1 containing the pattern ≥4 times, then a ≤120-word breakdown with 3 worked examples | 3–4 min |
+| micro | one **worked example card**: front shows the problem *already solved*, you read it and type it while visible | 20s |
+
+### 10.5 The card fix — a new card's first sight is not a test
+
+`srs.ts::pickQueue` mixes `state = 'new'` cards into the same session as reviews, and `sendCard` asks you to
+type the French for a word you may never have seen. That single behaviour is a large share of the
+interrogation feeling.
+
+```ts
+// lib/srs.ts — sendCard, new branch
+if (c.state === "new" && !c.introduced_at) {
+  // PRESENTATION, not retrieval: show both sides + audio, ask for a copy-typed repetition.
+  await sendMessage(chatId, `🆕 <b>${esc(c.front)}</b>\n➡️ <b>${esc(c.back)}</b>\n<i>Type it once, exactly.</i>`);
+  await sendVoiceById(chatId, await cardAudio(c), "");
+  await sql`UPDATE cards SET introduced_at = now() WHERE id = ${c.id}`;
+  await logExposure("card", String(c.id), "worked_example", c.id);
+  // copy-typing is motor encoding, not recall: it is graded 'good' and enters FSRS as learning, never 'again'
+}
+```
+
+Requires one column: `ALTER TABLE cards ADD COLUMN IF NOT EXISTS introduced_at TIMESTAMPTZ;`
+
+---
+
+## 11. Resource plumbing — where content comes from
+
+The honest constraint first: **there is no clean API for most authentic content.** Manga text, most YouTube
+transcripts, and paywalled news are either unavailable, fragile to scrape, or not ours to redistribute. Any
+architecture that assumes "the system finds the perfect native clip" will be a permanent source of breakage.
+
+So content comes from three tiers, and the volume deliberately sits in the middle one.
+
+### 11.1 Tier A — indexed feeds (data entry: zero, already half-built)
+
+`resources.feed_url` and `units.ts::ingestLatestEpisode` already exist. The change is **index, don't just
+fetch the latest**: a nightly job walks each feed, stores every new item as a `resource_unit`, and classifies
+it once.
+
+```sql
+ALTER TABLE resource_units ADD COLUMN IF NOT EXISTS topics     TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE resource_units ADD COLUMN IF NOT EXISTS module_fit TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE resource_units ADD COLUMN IF NOT EXISTS indexed_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS ix_13_units_fit ON resource_units USING GIN (module_fit);
+```
+
+```ts
+// api/cron/index-feeds.ts — one CURATOR call per NEW item, ever. Not per lesson, not per day.
+for (const item of await newFeedItems(resource)) {
+  const c = await ask<{ modules: string[]; clb: number; topics: string[]; usable: boolean }>("CURATOR",
+    `French audio item. Title: ${item.title}. Description: ${item.desc.slice(0, 1200)}.
+     Modules available: ${MODULE_INDEX.map(m => `${m.id}=${m.can_do}`).join("; ")}.
+     Return {"modules":[ids this genuinely practises],"clb":1-12,"topics":[3-6],"usable":false if it is
+     music, an ad, or has no speech}.`, { temperature: 0.2 });
+  if (c.usable) await sql`UPDATE resource_units SET module_fit = ${c.modules}, topics = ${c.topics},
+                          clb_level = ${c.clb}, indexed_at = now() WHERE id = ${item.id}`;
+}
+```
+
+The library grows on its own and each item is paid for once. Feeds that actually work and publish transcripts:
+**RFI Journal en français facile**, **InnerFrench**, **Français Authentique**, **Radio-Canada** feeds,
+**Wikipédia FR** (open API, good for reading at any level). That list is short on purpose — it is what is
+reliably fetchable, not what would be nice.
+
+### 11.2 Tier B — generated i+1 material (the workhorse)
+
+For most modules the ideal input does not exist as a native artefact anyway: you need a text at *your* exact
+level, about *your* life, that hits *this* pattern six times. That is a generation problem, and generation has
+no data entry by definition.
+
+The thing that makes generated content trustworthy is a **deterministic quality gate**, not a better prompt:
+
+```ts
+// lib/lexicon.ts — the learner's known lexicon, from what has actually been presented
+export async function knownLexicon(): Promise<Set<string>> {
+  const rows = await sql`
+    SELECT back AS t FROM cards WHERE NOT suspended AND (state <> 'new' OR introduced_at IS NOT NULL)
+    UNION ALL SELECT jsonb_array_elements(payload->'dialogue')->>'fr' FROM resource_units
+      WHERE status IN ('attempted','passed','mastered')`;
+  const s = new Set<string>();
+  for (const r of rows) for (const w of tokenise(r.t)) s.add(w);
+  for (const w of TOP_500_FR) s.add(w);          // corpus floor: assume the 500 commonest lemmas
+  return s;
+}
+
+export function unknownRatio(text: string, known: Set<string>) {
+  const toks = tokenise(text);
+  const unknown = toks.filter(w => !known.has(w));
+  return { ratio: unknown.length / Math.max(1, toks.length), unknown: [...new Set(unknown)] };
+}
+```
+
+```ts
+// lib/resource.ts — generate, then MEASURE. Regenerate against the measurement, not against a vibe.
+export async function generateInput(module: Module, clb: number, kind: "text" | "audio_snippet") {
+  const known = await knownLexicon();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const draft = await ask<{ body_fr: string }>("AUTHOR", inputPrompt(module, clb, kind, attempt));
+    const { ratio, unknown } = unknownRatio(draft.body_fr, known);
+    if (ratio <= 0.10) return { ...draft, unknown };            // i+1: ≤10% new, the rest known
+    if (attempt === 2) return { ...draft, unknown: unknown.slice(0, 8), degraded: true };
+  }
+}
+```
+
+**Every generated input is stored as a `resource_unit`** under a `generated` resource, tagged with its
+`module_fit`. It is therefore reusable, re-scheduleable, gate-checkable and cacheable exactly like an Assimil
+lesson. The library builds itself as you use it — that is the answer to the data-entry nightmare.
+
+### 11.3 Tier C — registered sources (data entry: once per source, never per item)
+
+The existing `content/resources/toolbox.json`. A row per *source* (Assimil PDF, a YouTube channel, a textbook),
+never a row per item. Already built, no change.
+
+### 11.4 The selection function
+
+```ts
+// lib/resource.ts — deterministic, with generation as the fallback, never a live web call at delivery time
+export async function resourceFor(m: Module, skill: Skill, env: Environment, minutes: number) {
+  const clb = await clbFor(skill);
+  const hit = await one`
+    SELECT * FROM resource_units
+     WHERE ${m.id} = ANY(module_fit) AND status = 'unseen'
+       AND clb_level BETWEEN ${clb - 0.5} AND ${clb + 1.5}
+       AND (skills && ${[skill]}::skill[])
+     ORDER BY ABS(clb_level - ${clb}), indexed_at DESC LIMIT 1`;
+  if (hit) return hit;                                   // Tier A: an indexed real item fits
+  return cacheAsUnit(m, await generateInput(m, clb, env === "driving" ? "audio_snippet" : "text"));
+}
+```
+
+Note what is absent: no live search, no scraping, no fetch at delivery time. Delivery reads the database;
+ingestion and generation happen on the nightly cron where latency and quota failures are harmless.
+
+---
+
+## 12. How FSRS actually hooks into the loop
+
+Three separate questions get conflated here — *when do reviews happen*, *do they steal progression time*, and
+*do they feed the module model*. They have three different answers.
+
+### 12.1 Reviews get a budget, not the whole session
+
+Rule 1 of the selector is capped per environment, so a review backlog can never eat a module day:
+
+```ts
+// lib/select.ts
+const DUE_BUDGET: Record<Environment, number> = {
+  micro:   1.0,     // a micro slot is entirely cards
+  driving: 0.35,    // audio-answerable cards folded into the drill's prompt stream
+  patrol:  0.20,
+  seated:  0.25,    // never more than a quarter of a focused block
+};
+const dueMinutes = Math.floor(minutes * DUE_BUDGET[env]);
+```
+
+### 12.2 The backlog governor — the Anki death spiral, prevented in code
+
+When you fall behind, the wrong response is to serve more cards; it is to stop making new ones. Today
+`new_cards_per_day` is a fixed setting. It becomes a function of the backlog:
+
+```ts
+// lib/srs.ts — replaces the fixed learner.settings.new_cards_per_day read in pickQueue()
+export async function newCardBudget(): Promise<number> {
+  const l = await one`SELECT due_now, due_tomorrow FROM v_fsrs_load`;
+  const backlog = Number(l?.due_now ?? 0) + Number(l?.due_tomorrow ?? 0);
+  const absorbable = 60;                                   // reviews/day 2h of study can actually absorb
+  const cap = Number((await getLearner()).settings?.new_cards_per_day ?? 20);
+  return Math.max(0, Math.round(cap * (1 - backlog / (absorbable * 2))));
+}
+```
+
+At a backlog of 120 the intake is 0; at 60 it is half; at 0 it is the full 20. Self-correcting, no dial to
+watch.
+
+### 12.3 Retention *feeds* module progression — it does not compete with it
+
+This is the part that answers "without breaking module progression." Cards get a module:
+
+```sql
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS module_id TEXT;
+CREATE INDEX IF NOT EXISTS ix_14_cards_module ON cards (module_id) WHERE NOT suspended;
+```
+
+and `module_state` reads FSRS stability as its **retention dimension** — which is what makes the `retaining`
+and `mastered` states mean something rather than being a label applied on the day you happened to score well:
+
+```sql
+-- component of module_state.score, recomputed nightly by lib/modules.ts
+SELECT AVG(LEAST(1.0, stability / 21.0)) AS retention
+  FROM cards
+ WHERE module_id = $1 AND NOT suspended AND state <> 'new';
+```
+
+Gate: **a module cannot enter `retaining` while its cards average under 14 days of stability**, no matter how
+well you scored on its check. Performance and durability are different claims and the model keeps them apart.
+
+### 12.4 Lapses are a remediation trigger, not just a reschedule
+
+FSRS reschedules a lapsed card. It does not ask *why* you keep forgetting it. That bridge is missing today:
+
+```ts
+// lib/srs.ts::applyRating, after the review_log insert
+if (rating === 1 && c.lapses + 1 >= 3) {
+  await sql`INSERT INTO error_patterns (category, kind, example, count)
+            VALUES (${"leech:" + (c.competency_code ?? c.front)}, 'lexis', ${c.back}, 1)
+            ON CONFLICT (category) DO UPDATE SET count = error_patterns.count + 1, last_seen = now()`;
+}
+```
+
+Selector rule 2 then picks it up and emits an **input-phase re-teach** of that item — a worked example, the
+word in three new contexts, audio — instead of showing you the same failing card a fourth time. A leech is a
+teaching failure, not a memory failure.
+
+### 12.5 Environment mapping for due cards
+
+`cards.answer_mode` (typed | self_rated | voice) already exists; the routing rule is:
+
+| env | which due cards | how answered |
+|---|---|---|
+| micro | any typed card | typed in Telegram |
+| driving | `kind` in (phrase, pronunciation, question_form), folded into the drill's TTS stream | aloud; verified at the post-drive spot check |
+| patrol | audio prompt, self-rated | tap |
+| seated | typed, plus every leech with its ❓ Why? | typed |
+
+### 12.6 Already correct, don't touch
+
+Interval capping at the exam horizon (`srs.ts::params()`), the full `review_log` for later weight
+optimisation, `recordEvidence` firing on every card review that carries a `competency_code`, and the
+`srs_deferred` arbitration in `flow.ts` that stops cards interrupting a running check.
+
+---
+
+## 13. Revised build order
+
+Part II changes the order: the input gate is worth more than the selector, because it fixes what the daily
+experience *feels* like, and it is smaller.
+
+| Phase | Work | Why here |
+|---|---|---|
+| **P0** | `modules.json`, `module_state`, `lib/modules.ts`, `/state` | nothing else can be built against an invisible model |
+| **P0.5** | `exposures` table · `cards.introduced_at` · new-card presentation step · `gateInput()` | **the interrogation fix — smallest change, biggest daily difference** |
+| **P1** | `/now` environment router | stops the clock guessing your shift |
+| **P1.5** | `lib/lexicon.ts` + `generateInput()` + `resource_units.module_fit` + the feed indexer | input phases need something to be made of |
+| **P2** | `lib/select.ts` (rules 1, 4, 5) · delete the PLANNER prompt · `DUE_BUDGET` + `newCardBudget()` | the day becomes deterministic and quota-proof |
+| **P3** | rules 2 and 3: leech → remediation, maintenance probes | needs ~2 weeks of real error data |
+| **P4 / P5** | pacing engine · immersion selection | last, and cheapest once the rest exists |
