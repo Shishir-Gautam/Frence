@@ -333,6 +333,30 @@ CREATE TABLE IF NOT EXISTS tts_cache (
 INSERT INTO learner (id) VALUES (1) ON CONFLICT DO NOTHING;
 INSERT INTO fsrs_params (id, weights) VALUES (1, ARRAY[0.4072,1.1829,3.1262,15.4722,7.2102,0.5316,1.0651,0.0234,1.616,0.1544,1.0824,1.9813,0.0953,0.2975,2.2042,0.2407,2.9466,0.5034,0.6567]) ON CONFLICT DO NOTHING;
 
+-- ================================================== MODULE LAYER =========
+-- The capability matrix (ARCHITECTURE §3.5): one row per (module, skill) the module declares.
+-- DERIVED, never written by hand — lib/modules.ts recomputes it from evidence already being
+-- collected (quiz_results, unit_checks, grammar_evidence, submissions) plus card stability as the
+-- retention dimension. 'Passed lesson 12' cannot tell knowing a rule apart from being able to say
+-- it out loud; this table can, and the weakest cell is what the planner should attack next.
+CREATE TABLE IF NOT EXISTS module_state (
+  module_id       TEXT NOT NULL,
+  skill           skill NOT NULL,
+  state           TEXT NOT NULL DEFAULT 'unseen',
+                  -- unseen | introduced | practicing | competent | retaining | mastered | maintenance
+  score           NUMERIC(4,3) NOT NULL DEFAULT 0,     -- 0..1 recency-weighted accuracy, shrunk when thin
+  confidence      NUMERIC(3,2) NOT NULL DEFAULT 0,     -- 0..1 from observation count
+  evidence_count  INT NOT NULL DEFAULT 0,
+  exam_evidence_count INT NOT NULL DEFAULT 0,
+  retention       NUMERIC(4,3),                        -- AVG(LEAST(1, card stability / 21 days)), NULL if no cards
+  first_competent TIMESTAMPTZ,
+  last_evidence   TIMESTAMPTZ,
+  next_probe      TIMESTAMPTZ,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (module_id, skill)
+);
+CREATE INDEX IF NOT EXISTS ix_15_module_state ON module_state (state, score);
+
 -- ============================================================ VIEWS =======
 -- What the planner reads. Keep these cheap; they're joined into the nightly snapshot.
 CREATE OR REPLACE VIEW v_grammar_weakest AS

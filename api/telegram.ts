@@ -12,7 +12,7 @@ import { gradeWriting, gradeSpeaking, finishInterview } from "../lib/grade.js";
 import { buildPlan, rebuildToday } from "../lib/planner.js";
 import { sendMorningCard, sendSlot, sendQueued } from "../lib/deliver.js";
 import { advance, clearAll, queueInfo } from "../lib/flow.js";
-import { sendProgress } from "../lib/progress.js";
+import { sendProgress, sendState } from "../lib/progress.js";
 import { teachable } from "../lib/grammar.js";
 import { tutor, ask, COMPETENCIES, pingModels, isQuotaExhausted, quotaPaused } from "../lib/coach.js";
 import { localDate } from "../lib/time.js";
@@ -112,6 +112,7 @@ async function onCommand(chatId: number, text: string) {
     }
     case "/zero": { await startFromZero(); await sendMessage(chatId, INTRO); const { date, plan } = await rebuildToday(); return sendMorningCard(chatId, date, plan); }
     case "/how": return sendMessage(chatId, INTRO);
+    case "/state": case "/matrix": return sendState(chatId);
     case "/more": case "/next2": return keepGoing(chatId);
     case "/roadmap": {
       const { CURRICULUM } = await import("../lib/units.js");
@@ -124,7 +125,7 @@ async function onCommand(chatId: number, text: string) {
       return;
     }
     case "/help":
-      return sendMessage(chatId, "/today /roadmap /progress /nclc /how /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/fr [an English thought] = say it in French · /codes · /exam YYYY-MM-DD · /log 25 min podcast · /skip · /next · /more\nAny voice note = speaking feedback; any French text = writing feedback; an English question = tutor; an English statement about your day = I make you say it in French.");
+      return sendMessage(chatId, "/today /roadmap /progress /nclc /how /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/state = the capability matrix (what you can do, per skill) · /fr [an English thought] = say it in French\n/codes · /exam YYYY-MM-DD · /log 25 min podcast · /skip · /next · /more\nAny voice note = speaking feedback; any French text = writing feedback; an English question = tutor; an English statement about your day = I make you say it in French.");
     case "/placement": {
       await sendMessage(chatId, "Building your placement test…");
       const items = await checks.authorPlacement();

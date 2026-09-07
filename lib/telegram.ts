@@ -103,6 +103,7 @@ export function setCommands() {
       { command: "listen", description: "TCF-style listening set" },
       { command: "read", description: "TCF-style reading set" },
       { command: "progress", description: "Progress vs CLB 7" },
+      { command: "state", description: "Capability matrix — what you can do, per skill" },
       { command: "nclc", description: "TCF Canada readiness (estimate + evidence)" },
       { command: "fr", description: "Say a thought in French: /fr I'm off at eight" },
       { command: "roadmap", description: "The 40-unit map and where you are" },

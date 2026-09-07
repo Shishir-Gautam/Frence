@@ -49,6 +49,7 @@ export async function buildPlan(forDate?: string): Promise<{ date: string; plan:
   const learner = await getLearner();
   const date = forDate ?? localDate(learner.tz, 1);
   await updateReceptiveEstimates();
+  try { const { recomputeAll } = await import("./modules.js"); await recomputeAll(); } catch (e) { console.error("module recompute", e); }
   if ((await stage()) === "beginner") return beginnerPlan(date, !forDate);
   const snap = await plannerSnapshot();
   // make sure each active feed/course has a concrete next unit the planner can reference

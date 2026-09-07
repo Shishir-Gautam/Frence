@@ -1,4 +1,5 @@
-import { sql, one, getLearner, currentClb, setClb } from "./db.js";
+import { sql, one, getLearner, currentClb, setClb, kvGet, kvSet } from "./db.js";
+import { splitTelegram } from "./text.js";
 import { sendMessage, esc } from "./telegram.js";
 import { tutor, ask } from "./coach.js";
 import { gridSummary } from "./grammar.js";
@@ -91,4 +92,54 @@ export async function placementEstimate(items: Item[]): Promise<string> {
 Estimate starting CLB (1-12, decimals allowed, be conservative) per skill. Return {"listening","reading","writing","speaking","note": one sentence}`, { temperature: 0.1 });
   for (const s of ["listening", "reading", "writing", "speaking"] as const) await setClb(s, Math.max(1, Math.min(12, Number((r as any)[s]) || 1)), 0.35, { placement: true });
   return `Placement: L ${r.listening} · R ${r.reading} · W ${r.writing} · S ${r.speaking}. ${r.note}`;
+}
+
+// ---------------------------------------------------------------- /state --
+// The capability matrix, rendered. This is the answer to "what decides what state I'm in": every
+// cell below was computed from checks the bot administered — none of it is self-reported.
+import { MODULES, FAMILIES, FAMILY_ORDER, STATE_RANK, matrix, unlocked, bottleneck, recomputeAll, type Cell } from "./modules.js";
+
+const BAR = (state: string) => "▓".repeat(STATE_RANK[state as keyof typeof STATE_RANK] ?? 0) + "░".repeat(5 - (STATE_RANK[state as keyof typeof STATE_RANK] ?? 0));
+const MARK = (cells: Cell[]) => {
+  if (!cells.length || cells.every((c) => c.state === "unseen")) return "▫️";
+  if (cells.every((c) => STATE_RANK[c.state] >= STATE_RANK.mastered)) return "✅";
+  return "▶️";
+};
+
+export async function sendState(chatId: number, opts: { recompute?: boolean } = {}) {
+  if (opts.recompute !== false) {
+    const fresh = await kvGet<{ at: number }>("module_state_at");
+    if (!fresh || Date.now() - fresh.at > 10 * 60000) {
+      await sendMessage(chatId, "🧠 Recomputing from your evidence…");
+      await recomputeAll();
+      await kvSet("module_state_at", { at: Date.now() }, 60);
+    }
+  }
+  const mx = await matrix();
+
+  const locked: string[] = [], untouched: string[] = [];
+  const blocks: string[] = [];
+  for (const family of FAMILY_ORDER) {
+    const mods = MODULES.filter((m) => m.family === family);
+    const lines: string[] = [];
+    for (const m of mods) {
+      const cells = (mx.get(m.id) ?? []).sort((a, b) => a.skill.localeCompare(b.skill));
+      if (!unlocked(m, mx)) { locked.push(m.name); continue; }
+      if (!cells.length || cells.every((c) => c.state === "unseen")) { untouched.push(m.name); continue; }
+      lines.push(`${MARK(cells)} <b>${esc(m.name)}</b>\n` + cells.map((c) =>
+        `    <code>${BAR(c.state)}</code> ${c.skill.padEnd(9)} ${esc(c.state)}${c.evidence_count ? ` · ${c.evidence_count} obs` : ""}${c.retention !== null && c.retention < 14 / 21 && STATE_RANK[c.state] >= 3 ? " · retention thin" : ""}`).join("\n"));
+    }
+    if (lines.length) blocks.push(`<b>${family.toUpperCase()}</b> — <i>${esc(FAMILIES[family])}</i>\n${lines.join("\n")}`);
+  }
+
+  const b = await bottleneck(mx);
+  const tail = [
+    untouched.length ? `▫️ <b>Open, not started</b> (${untouched.length}): ${untouched.slice(0, 6).map(esc).join(" · ")}${untouched.length > 6 ? " …" : ""}` : "",
+    locked.length ? `🔒 <b>Locked</b> — prerequisites not met (${locked.length}): ${locked.slice(0, 5).map(esc).join(" · ")}${locked.length > 5 ? " …" : ""}` : "",
+    b ? `\n⛳ <b>Your bottleneck</b> — ${esc(b.module.name)} / ${esc(b.cell.skill)}\n<i>${esc(b.cell.state)}, ${b.cell.score.toFixed(2)} from ${b.cell.evidence_count} observation${b.cell.evidence_count === 1 ? "" : "s"}. ${esc(b.module.can_do)}</i>`
+      : "\n⛳ <i>No evidence yet — the first checks you take will fill this in.</i>",
+  ].filter(Boolean).join("\n");
+
+  const head = `🧠 <b>Where you actually are</b>\n<i>${MODULES.length} capabilities, each tracked in the skills it's actually used in. Every cell is computed from checks you took — nothing here is self-reported.</i>\n<code>░░░░░</code> not started → <code>▓▓░░░</code> practising → <code>▓▓▓░░</code> competent → <code>▓▓▓▓▓</code> mastered\n`;
+  for (const c of splitTelegram(`${head}\n${blocks.join("\n\n")}\n\n${tail}`)) await sendMessage(chatId, c);
 }
