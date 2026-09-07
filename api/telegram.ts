@@ -20,6 +20,8 @@ import { startFromZero, stage, INTRO } from "../lib/stage.js";
 import { startPractice, practiceAnswer, explainLastMiss } from "../lib/teach.js";
 import { challenge, liveAnswer, looksLikeQuestion } from "../lib/live.js";
 import { sendReadiness } from "../lib/nclc.js";
+import { rescueUnit, rescueDrill } from "../lib/rescue.js";
+import { keepGoing } from "../lib/more.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(200).send("ok");
@@ -110,6 +112,7 @@ async function onCommand(chatId: number, text: string) {
     }
     case "/zero": { await startFromZero(); await sendMessage(chatId, INTRO); const { date, plan } = await rebuildToday(); return sendMorningCard(chatId, date, plan); }
     case "/how": return sendMessage(chatId, INTRO);
+    case "/more": case "/next2": return keepGoing(chatId);
     case "/roadmap": {
       const { CURRICULUM } = await import("../lib/units.js");
       const { roadmapLine } = await import("../lib/deliver.js");
@@ -121,7 +124,7 @@ async function onCommand(chatId: number, text: string) {
       return;
     }
     case "/help":
-      return sendMessage(chatId, "/today /roadmap /progress /nclc /how /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/fr [an English thought] = say it in French · /codes · /exam YYYY-MM-DD · /log 25 min podcast · /skip · /next\nAny voice note = speaking feedback; any French text = writing feedback; an English question = tutor; an English statement about your day = I make you say it in French.");
+      return sendMessage(chatId, "/today /roadmap /progress /nclc /how /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/fr [an English thought] = say it in French · /codes · /exam YYYY-MM-DD · /log 25 min podcast · /skip · /next · /more\nAny voice note = speaking feedback; any French text = writing feedback; an English question = tutor; an English statement about your day = I make you say it in French.");
     case "/placement": {
       await sendMessage(chatId, "Building your placement test…");
       const items = await checks.authorPlacement();
@@ -210,7 +213,9 @@ async function onCallback(q: any) {
     await editMessage(chatId, mid, "🧪 Placement — building it…");
     return checks.startCheck({ chatId, type: "placement", title: "Placement", items: await checks.authorPlacement(), env: "seated", pass_pct: 0 });
   }
-  if (kind === "q" && a === "next") { if (!(await advance(sendQueued))) await sendMessage(chatId, "Nothing queued."); return; }
+  if (kind === "q" && a === "next") { if (!(await advance(sendQueued))) await keepGoing(chatId); return; }
+  if (kind === "more" && a === "next") return keepGoing(chatId);
+  if (kind === "huh") return a === "drill" ? rescueDrill(chatId, Number(b)) : rescueUnit(chatId, Number(b));
   if (kind === "chk") {
     if (a === "mcq") return checks.answer({ pos: Number(b), mcq: Number(c), messageId: mid });
     if (a === "skip") return checks.answer({ pos: b !== undefined ? Number(b) : undefined, skip: true });
@@ -220,6 +225,12 @@ async function onCallback(q: any) {
     if (a === "check") { const [, , , dId, env] = data.split(":"); return startUnitCheck(chatId, Number(b), env && env !== "undefined" ? env : "patrol", Number(dId) || undefined); }
     if (a === "practice") { const saved = await kvGet<{ cb: string }>("practice_cb:" + b); return startPractice(chatId, Number(b), saved?.cb ?? `unit:check:${b}:0:patrol`); }
     if (a === "notes") return sendNotes(chatId, Number(b));
+    if (a === "teach") {
+      const u = await one`SELECT * FROM resource_units WHERE id = ${Number(b)}`;
+      if (!u) return;
+      const { teach } = await import("../lib/teach.js");
+      return teach(chatId, u, "seated");
+    }
   }
   if (kind === "prac" && a === "show") return practiceAnswer(undefined, true);
   if (kind === "start2") {
@@ -251,9 +262,10 @@ async function onCallback(q: any) {
     if (a === "srs") return srs.startSession(chatId, 15, "micro");
     const p = await one`SELECT plan FROM plans WHERE plan_date = ${date}`;
     const slot = p?.plan?.slots?.find((s: any) => s.environment === a);
-    if (!slot) return sendMessage(chatId, "That slot isn't in today's plan.");
+    if (!slot) return sendMessage(chatId, "That slot isn't in today's plan.", [[{ text: "▶️ Keep going", callback_data: "more:next" }]]);
     const sentAlready = await one`SELECT id, status FROM deliveries WHERE plan_date=${date} AND environment=${a}::environment AND status IN ('sent','sending','completed') ORDER BY scheduled_at DESC LIMIT 1`;
-    if (sentAlready) return sendMessage(chatId, sentAlready.status === "completed" ? "That slot is already done today." : "That slot was already sent — scroll up, or tap ⏭ Next item / use /next.", [[{ text: "⏭ Next item", callback_data: "q:next" }]]);
+    if (sentAlready) return sendMessage(chatId, sentAlready.status === "completed" ? "That slot is already done today." : "That slot was already sent — scroll up, or carry on below.",
+      [[{ text: "⏭ Next item", callback_data: "q:next" }], [{ text: "▶️ Keep going", callback_data: "more:next" }]]);
     const d = await one`SELECT id FROM deliveries WHERE plan_date=${date} AND environment=${a}::environment AND status='pending' ORDER BY scheduled_at LIMIT 1`;
     if (d) await sql`UPDATE deliveries SET status='sent', sent_at=now() WHERE id=${d.id}`;
     return sendSlot(chatId, a, slot.items, slot.minutes, d ? Number(d.id) : undefined);

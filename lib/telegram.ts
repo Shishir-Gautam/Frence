@@ -109,6 +109,7 @@ export function setCommands() {
       { command: "log", description: "Log minutes: /log 25 patrol" },
       { command: "replan", description: "Regenerate today's plan" },
       { command: "next", description: "Next item of the current slot" },
+      { command: "more", description: "Keep going — give me the next thing" },
       { command: "skip", description: "Abandon the current item/test" },
       { command: "ping", description: "Check which Gemini models respond" },
       { command: "help", description: "What can I do" },

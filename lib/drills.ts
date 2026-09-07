@@ -6,6 +6,7 @@ import { ask, competencyName, COMPETENCIES } from "./coach.js";
 import { renderDrill, type DrillStep } from "./tts.js";
 import { startCheck, sanitize, type Item } from "./checks.js";
 import { knownMaterial, knownClause, stage } from "./stage.js";
+import { huh } from "./rescue.js";
 
 export type DrillSpec = { method: "pimsleur" | "michel_thomas" | "language_transfer"; competency_codes: string[]; minutes?: number; unit_id?: number };
 
@@ -62,7 +63,10 @@ export async function sendDrill(chatId: number, drillId: number, deliveryId?: nu
   }
   await sql`UPDATE drills SET times_played = times_played + 1 WHERE id = ${drillId}`;
   await kvSet("spot_pending", { drill_id: drillId, delivery_id: deliveryId ?? null }, 24 * 60);   // auto-runs at the next card slot if not taken
-  await sendMessage(chatId, "After the drive:", [[{ text: "🧪 Spot check (5)", callback_data: `drill:spot:${drillId}${deliveryId ? ":" + deliveryId : ""}` }]]);
+  await sendMessage(chatId, "After the drive:", [
+    [{ text: "🧪 Spot check (5)", callback_data: `drill:spot:${drillId}${deliveryId ? ":" + deliveryId : ""}` }],
+    [huh("drill", drillId)],
+  ]);
 }
 
 export async function startSpotCheck(chatId: number, drillId: number, deliveryId?: number) {

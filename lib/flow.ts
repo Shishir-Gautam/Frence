@@ -37,7 +37,7 @@ export async function advance(sendItem: (item: any) => Promise<any>) {
   if (!next) {
     await kvDel("slot_queue");
     if (q.deliveryId) await sql`UPDATE deliveries SET status = 'completed', completed_at = now() WHERE id = ${q.deliveryId}`;
-    await sendMessage(q.chatId, "✅ Slot done.");
+    await sendMessage(q.chatId, "✅ Slot done.", [[{ text: "▶️ Keep going", callback_data: "more:next" }]]);
     return false;
   }
   q.current = next;

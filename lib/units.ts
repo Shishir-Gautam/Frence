@@ -8,6 +8,7 @@ import { addCards } from "./srs.js";
 import { startCheck, authorUnitGate } from "./checks.js";
 import { splitTelegram } from "./text.js";
 import { knownMaterial, knownClause } from "./stage.js";
+import { huh } from "./rescue.js";
 
 export async function getUnit(id: number) { return one`SELECT * FROM resource_units WHERE id = ${id}`; }
 
@@ -96,14 +97,19 @@ async function sendAssimil(chatId: number, u: any, env: string, mode: "study" | 
   const isRevision = !d.length;
   if (mode === "active") {
     await sendMessage(chatId, `🔁 <b>Active wave — Leçon ${u.seq}</b>\nTranslate each line into French, then take the check.\n\n${d.map((l, i) => `${i + 1}. ${esc(l.en)}`).join("\n")}`,
-      [[{ text: "🧪 Check me", callback_data: cb }]]);
+      [[{ text: "🧪 Check me", callback_data: cb }], [huh("unit", Number(u.id))]]);
     return;
   }
   await sendChatAction(chatId, "record_voice");
   if (mode === "replay") {
-    if (u.audio_normal) await sendVoiceById(chatId, u.audio_normal, `🔁 Leçon ${u.seq} — ${esc(u.title ?? "")}. Shadow it: speak with the voice, match rhythm and liaison.`);
-    else { const mp3 = await speakDialogue(d, "normal"); const id = await sendVoice(chatId, mp3, `🔁 Leçon ${u.seq} — shadow it`); await sql`UPDATE resource_units SET audio_normal = ${id} WHERE id = ${u.id}`; }
-    await sendMessage(chatId, "Shadowed it?", [[{ text: "✅ Done", callback_data: "q:next" }]]);   // replay has no check: learner advances the slot
+    // The lines go FIRST. A bare voice note in a language you can't yet decode is noise, not practice.
+    const lines = d.map((l, i) => `${i + 1}. <b>${esc(l.fr)}</b>\n    <i>${esc(l.en)}</i>`).join("\n");
+    for (const c of splitTelegram(`🔁 <b>Leçon ${u.seq} — ${esc(u.title ?? "")}</b>\n<i>You've met these lines before. Read them, then speak along with the recording — match the rhythm, don't rush.</i>\n\n${lines}`)) await sendMessage(chatId, c);
+    await sendChatAction(chatId, "record_voice");
+    const cap = `🔁 Shadow it: speak with the voice, match rhythm and liaison.`;
+    if (u.audio_normal) await sendVoiceById(chatId, u.audio_normal, cap);
+    else { const mp3 = await speakDialogue(d, "normal"); const id = await sendVoice(chatId, mp3, cap); await sql`UPDATE resource_units SET audio_normal = ${id} WHERE id = ${u.id}`; }
+    await sendMessage(chatId, "Shadowed it?", [[{ text: "✅ Done", callback_data: "q:next" }], [huh("unit", Number(u.id))]]);   // replay has no check: learner advances the slot
     return;
   }
   if (isRevision) {
@@ -128,7 +134,7 @@ async function sendEpisode(chatId: number, u: any, env: string, cb: string) {
   const vocab = (p.key_vocab ?? []).map((v: any) => `• <b>${esc(v.fr)}</b> — ${esc(v.en)}`).join("\n");
   await sendMessage(chatId,
     `🎙 <b>${esc(u.title ?? u.resource_id)}</b>\n${esc(p.mp3 ?? p.url ?? "")}\n\n<i>${esc(p.summary ?? "")}</i>\n\n📚 Before listening:\n${vocab}\n\n<i>Listen ${env === "driving" ? "in the car" : "on patrol"}; the check asks you to recall it in French.</i>`,
-    [[{ text: "🧪 Check me", callback_data: cb }]]);
+    [[{ text: "🧪 Check me", callback_data: cb }], [huh("unit", Number(u.id))]]);
 }
 
 export async function sendNotes(chatId: number, unitId: number) {
