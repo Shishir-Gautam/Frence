@@ -274,7 +274,7 @@ CREATE INDEX IF NOT EXISTS ix_11_exam_evidence ON exam_evidence (component, crea
 CREATE TABLE IF NOT EXISTS error_patterns (
   id              SERIAL PRIMARY KEY,
   category        TEXT NOT NULL UNIQUE,         -- 'voyelles nasales', 'anglicisme', 'registre familier à l'écrit'
-  kind            TEXT NOT NULL,                -- pronunciation | lexis | register | spelling
+  kind            TEXT NOT NULL,                -- pronunciation | lexis | register | spelling | comprehension
   count           INT NOT NULL DEFAULT 1,
   example         TEXT,
   last_seen       TIMESTAMPTZ NOT NULL DEFAULT now()

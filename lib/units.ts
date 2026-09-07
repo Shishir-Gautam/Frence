@@ -97,7 +97,7 @@ async function sendAssimil(chatId: number, u: any, env: string, mode: "study" | 
   const isRevision = !d.length;
   if (mode === "active") {
     await sendMessage(chatId, `🔁 <b>Active wave — Leçon ${u.seq}</b>\nTranslate each line into French, then take the check.\n\n${d.map((l, i) => `${i + 1}. ${esc(l.en)}`).join("\n")}`,
-      [[{ text: "🧪 Check me", callback_data: cb }], [huh("unit", Number(u.id))]]);
+      [[{ text: "🧪 Check me", callback_data: cb }], [huh("unit", Number(u.id), env)]]);
     return;
   }
   await sendChatAction(chatId, "record_voice");
@@ -109,7 +109,7 @@ async function sendAssimil(chatId: number, u: any, env: string, mode: "study" | 
     const cap = `🔁 Shadow it: speak with the voice, match rhythm and liaison.`;
     if (u.audio_normal) await sendVoiceById(chatId, u.audio_normal, cap);
     else { const mp3 = await speakDialogue(d, "normal"); const id = await sendVoice(chatId, mp3, cap); await sql`UPDATE resource_units SET audio_normal = ${id} WHERE id = ${u.id}`; }
-    await sendMessage(chatId, "Shadowed it?", [[{ text: "✅ Done", callback_data: "q:next" }], [huh("unit", Number(u.id))]]);   // replay has no check: learner advances the slot
+    await sendMessage(chatId, "Shadowed it?", [[{ text: "✅ Done", callback_data: "q:next" }], [huh("unit", Number(u.id), env)]]);   // replay has no check: learner advances the slot
     return;
   }
   if (isRevision) {
@@ -134,7 +134,7 @@ async function sendEpisode(chatId: number, u: any, env: string, cb: string) {
   const vocab = (p.key_vocab ?? []).map((v: any) => `• <b>${esc(v.fr)}</b> — ${esc(v.en)}`).join("\n");
   await sendMessage(chatId,
     `🎙 <b>${esc(u.title ?? u.resource_id)}</b>\n${esc(p.mp3 ?? p.url ?? "")}\n\n<i>${esc(p.summary ?? "")}</i>\n\n📚 Before listening:\n${vocab}\n\n<i>Listen ${env === "driving" ? "in the car" : "on patrol"}; the check asks you to recall it in French.</i>`,
-    [[{ text: "🧪 Check me", callback_data: cb }], [huh("unit", Number(u.id))]]);
+    [[{ text: "🧪 Check me", callback_data: cb }], [huh("unit", Number(u.id), env)]]);
 }
 
 export async function sendNotes(chatId: number, unitId: number) {

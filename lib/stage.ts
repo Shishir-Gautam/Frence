@@ -13,7 +13,8 @@ export async function stage(): Promise<Stage> {
   const passed = await one`SELECT COUNT(*)::int AS n FROM resource_units WHERE status IN ('passed','mastered') AND resource_id IN ('assimil','coach_lessons')`;
   if (learner.settings?.stage === "core") return "core";
   const n = Number(passed?.n ?? 0);
-  if (n >= 40) return "core";                                                    // curriculum finished
+  // Volume is not evidence: finishing 40 lessons in a fortnight must not hand you the core planner.
+  if (n >= 40 && clb.listening.clb >= 3 && clb.listening.confidence >= 0.4) return "core";   // curriculum finished, and it stuck
   if (n >= 28 && clb.listening.clb >= 3 && clb.listening.confidence >= 0.4) return "core";   // stage 3 + real listening evidence
   return "beginner";
 }

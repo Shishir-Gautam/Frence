@@ -65,7 +65,7 @@ export async function sendDrill(chatId: number, drillId: number, deliveryId?: nu
   await kvSet("spot_pending", { drill_id: drillId, delivery_id: deliveryId ?? null }, 24 * 60);   // auto-runs at the next card slot if not taken
   await sendMessage(chatId, "After the drive:", [
     [{ text: "🧪 Spot check (5)", callback_data: `drill:spot:${drillId}${deliveryId ? ":" + deliveryId : ""}` }],
-    [huh("drill", drillId)],
+    [huh("drill", drillId, "driving")],
   ]);
 }
 

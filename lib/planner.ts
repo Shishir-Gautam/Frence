@@ -196,6 +196,27 @@ export async function preauthor(plan: Plan) {
     try { it.drill_id = await authorDrill({ method: it.method, competency_codes: it.competency_codes, minutes: it.minutes, unit_id: it.unit_id }); await prerenderDrill(it.drill_id); }
     catch (e) { console.error("preauthor drill", e); }
   }
+  await prewarmRescueAudio(plan);
+}
+
+/**
+ * The '🤷 Didn't catch it' rescue plays the SLOW recording, and only the study path ever caches one —
+ * a lesson delivered as replay has no slow audio at all. Synthesising it at rescue time is a live
+ * Gemini call, so the net breaks exactly when the quota is gone. We can't mint a Telegram file_id
+ * without sending, but we CAN pre-warm tts_cache: speakDialogue() caches by sha1(style|voice|text),
+ * so tomorrow's rescue becomes a cache hit and an upload, with no model call.
+ */
+async function prewarmRescueAudio(plan: Plan) {
+  const ids = [...new Set(plan.slots.flatMap((s) => s.items).filter((i): i is Extract<PlanItem, { type: "unit" }> => i.type === "unit").map((i) => i.unit_id))];
+  for (const id of ids) {
+    try {
+      const u = await one`SELECT audio_slow, payload FROM resource_units WHERE id = ${id}`;
+      const d = u?.payload?.dialogue ?? [];
+      if (!u || u.audio_slow || !d.length) continue;          // already uploaded, or nothing to speak
+      const { speakDialogue } = await import("./tts.js");
+      await speakDialogue(d, "slow");                          // discard the bytes; the segments are now cached
+    } catch (e) { console.error("prewarm rescue audio", id, e); }
+  }
 }
 
 /** Plan -> deliveries (replaces pending ones for that date). */

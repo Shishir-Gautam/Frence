@@ -215,7 +215,7 @@ async function onCallback(q: any) {
   }
   if (kind === "q" && a === "next") { if (!(await advance(sendQueued))) await keepGoing(chatId); return; }
   if (kind === "more" && a === "next") return keepGoing(chatId);
-  if (kind === "huh") return a === "drill" ? rescueDrill(chatId, Number(b)) : rescueUnit(chatId, Number(b));
+  if (kind === "huh") return a === "drill" ? rescueDrill(chatId, Number(b)) : rescueUnit(chatId, Number(b), c || "patrol");
   if (kind === "chk") {
     if (a === "mcq") return checks.answer({ pos: Number(b), mcq: Number(c), messageId: mid });
     if (a === "skip") return checks.answer({ pos: b !== undefined ? Number(b) : undefined, skip: true });
