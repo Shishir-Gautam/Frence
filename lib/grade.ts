@@ -16,7 +16,21 @@ export type Grade = {
   grammar_evidence: { competency_code: string; correct: boolean; excerpt?: string }[];
   new_cards: { front: string; back: string; accept?: string[]; kind?: string; competency_code?: string | null }[];
   strengths: string[]; next_focus: string[]; feedback_en: string;
+  module_fail_signals?: string[];
 };
+
+/** When a module ordered this task, the grader is also asked which of THAT module's failure modes it sees. */
+async function moduleClause(submissionId: number): Promise<string> {
+  const { kvGet } = await import("./db.js");
+  const run = await kvGet<any>("module_run");
+  if (!run || (run.submission_id && run.submission_id !== submissionId)) return "";
+  const { taskDef } = await import("./task-modules.js");
+  const def = taskDef(run.module_id);
+  if (!def) return "";
+  return `\n\nThis task was ordered by MODULE ${def.id} — ${def.name}. Objective: ${def.can_do}
+Grade it as evidence for that objective specifically. Also return "module_fail_signals": the subset of this list you actually observe (exact strings, [] if none): ${JSON.stringify(def.fail_signals)}`;
+}
+
 
 async function pendingSubmission(skill: "writing" | "speaking", awaiting: any) {
   if (awaiting?.submission_id) return one`SELECT * FROM submissions WHERE id = ${awaiting.submission_id}`;
@@ -28,7 +42,7 @@ export async function gradeWriting(chatId: number, text: string) {
   let sub = await pendingSubmission("writing", awaiting?.kind === "writing" ? awaiting : null);
   if (!sub) { const r = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('writing','free','seated','(free writing)') RETURNING *`; sub = r[0]; }
   await sendMessage(chatId, "📝 Grading against the TCF rubric…");
-  const g = await ask<Grade>("GRADER", `Task type: ${sub.task_type}\nPrompt:\n${sub.prompt}\n\nLearner's text (${text.split(/\s+/).length} words):\n${text}`, { temperature: 0.2 });
+  const g = await ask<Grade>("GRADER", `Task type: ${sub.task_type}\nPrompt:\n${sub.prompt}\n\nLearner's text (${text.split(/\s+/).length} words):\n${text}${await moduleClause(Number(sub.id))}`, { temperature: 0.2 });
   await finish(chatId, "writing", sub, g, { content: text, word_count: text.split(/\s+/).length, delivery_id: awaiting?.delivery_id });
 }
 
@@ -39,7 +53,7 @@ export async function gradeSpeaking(chatId: number, audio: Uint8Array, mime: str
   let sub = await pendingSubmission("speaking", awaiting?.kind === "speaking" ? awaiting : null);
   if (!sub) { const r = await sql`INSERT INTO submissions (skill, task_type, environment, prompt) VALUES ('speaking','free','seated','(free speaking)') RETURNING *`; sub = r[0]; }
   await sendMessage(chatId, "🎧 Listening… transcribing and grading.");
-  const g = await ask<Grade>("GRADER", `Task type: ${sub.task_type}\nPrompt:\n${sub.prompt}\n\nGrade the attached French audio (${durationS ?? "?"} s). Transcribe first.`, { audio: { data: audio, mime }, temperature: 0.2 });
+  const g = await ask<Grade>("GRADER", `Task type: ${sub.task_type}\nPrompt:\n${sub.prompt}\n\nGrade the attached French audio (${durationS ?? "?"} s). Transcribe first.${await moduleClause(Number(sub.id))}`, { audio: { data: audio, mime }, temperature: 0.2 });
   await finish(chatId, "speaking", sub, g, { content: g.transcript ?? "", audio_file: fileId, duration_s: durationS, delivery_id: awaiting?.delivery_id });
 }
 
@@ -91,6 +105,9 @@ async function finish(chatId: number, skill: "writing" | "speaking", sub: any, g
   const aw = await kvGet<any>("awaiting");
   if (aw?.kind === skill || aw?.submission_id === sub.id) await kvDel("awaiting");
   await updateProductiveEstimate(skill);
+  // exam-track attribution: the graded CLB advances (or costs back) the task module's counters
+  const { attributeToModule } = await import("./module-run.js");
+  const moved = await attributeToModule(null, clb, { submission_id: Number(sub.id), fail_signals: g.module_fail_signals ?? [], ref: { table: "submissions", id: Number(sub.id) } });
 
   const crit = Object.entries(g.criteria ?? {}).filter(([, v]) => v != null).map(([k, v]) => `${k.replace(/_/g, " ")} ${v}`).join(" · ");
   const corr = (g.corrections ?? []).filter((c) => c && c.original && c.fix).slice(0, 8).map((c) => `• <s>${esc(c.original)}</s> → <b>${esc(c.fix)}</b>\n  <i>${esc(c.why ?? "")}${c.competency_code ? ` [${esc(competencyName(c.competency_code))}]` : ""}</i>`).join("\n");
@@ -98,7 +115,8 @@ async function finish(chatId: number, skill: "writing" | "speaking", sub: any, g
     (g.transcript && skill === "speaking" && sub.task_type?.startsWith("interview") !== true ? `🗣 <i>${esc(g.transcript)}</i>\n\n` : "") +
     `✅ <b>Version corrigée</b>\n${esc(g.corrected_text ?? "")}\n\n${corr ? `🔧 <b>Corrections</b>\n${corr}\n\n` : ""}` +
     `💪 ${esc((g.strengths ?? []).join("; "))}\n🎯 ${esc((g.next_focus ?? []).map(competencyName).join("; "))}\n\n${esc(g.feedback_en ?? "")}` +
-    (added ? `\n\n🃏 ${added} cards from your mistakes.` : "");
+    (added ? `\n\n🃏 ${added} cards from your mistakes.` : "") +
+    (moved ? `\n🧩 ${moved.to === moved.from ? `Module evidence recorded (${moved.to}).` : `Module ${moved.from} → <b>${moved.to}</b>.`}` : "");
   for (const chunk of splitTelegram(msg)) await sendMessage(chatId, chunk);
   const { onItemDone } = await import("./deliver.js");
   await onItemDone(String(sub.task_type).startsWith("interview") ? "interview" : skill);

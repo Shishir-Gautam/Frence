@@ -60,6 +60,17 @@ function mockGemini(role: string, user: string): any {
     grammar_evidence: [{ competency_code: "TNS_PRESENT_IRREG", correct: true, excerpt: "je suis" }, { competency_code: "TNS_INDICATEURS_TEMPS", correct: false, excerpt: "j'ai habité depuis" }],
     new_cards: [{ front: "I have lived here for a year", back: "J'habite ici depuis un an", accept: [], kind: "grammar", competency_code: "TNS_INDICATEURS_TEMPS" }],
     strengths: ["clear"], next_focus: ["TNS_INDICATEURS_TEMPS"], feedback_en: "Good start. Fix depuis." };
+  if (role === "EXAMINER" && /Build ONE (listening|reading) set/.test(user)) {
+    const comp = /Build ONE listening/.test(user) ? "listening" : "reading";
+    return { title: "Module set", [comp === "listening" ? "passage" : "text"]: "Le train de huit heures est supprimé. Prenez le suivant.",
+      items: Array.from({ length: 5 }, (_, i) => ({ kind: "mcq", prompt: `Question ${i}`, options: ["A", "B", "C", "D"], answer_index: 0, item_clb: 4, skill: comp })) };
+  }
+  if (role === "EXAMINER" && /Teach this module before testing it/.test(user))
+    return { model_fr: "Je pense que oui, parce que c'est utile.", en: "I think so, because it is useful.", skeleton: ["position", "raison"], phrases: [{ fr: "à mon avis", en: "in my opinion" }], watch_out: "support the opinion" };
+  if (role === "EXAMINER" && /Write 5 CONTROLLED items/.test(user))
+    return { items: Array.from({ length: 5 }, (_, i) => ({ kind: "typed", prompt: `Say it ${i}`, expected: `Je pense que oui ${i}`, accept: [], item_clb: 4, competency_code: "CON_OPINION" })) };
+  if (role === "EXAMINER" && /task that forces this module/.test(user))
+    return { prompt_fr: "Faut-il rendre les transports gratuits ?", instructions_en: "120-180 words, 20 minutes.", helpers: [{ fr: "à mon avis", en: "in my opinion" }] };
   if (role === "EXAMINER") {
     if (/placement/i.test(user)) return { items: [
       { kind: "mcq", prompt: "« Bonjour » veut dire…", options: ["Hello", "Bye", "Thanks", "Yes"], answer_index: 0, item_clb: 1, skill: "reading" },
@@ -109,7 +120,8 @@ import { localDate } from "../lib/time.js";
 const assert = (c: any, m: string) => { if (!c) { console.error("❌ " + m); process.exit(1); } console.log("✓ " + m); };
 const CHAT = 42;
 
-for (const t of ["review_log", "exam_evidence", "error_patterns", "cards", "unit_checks", "drill_sessions", "drills", "grammar_evidence", "submissions", "quiz_results", "activity_log", "deliveries", "plans", "resource_units", "kv", "skill_estimates", "tts_cache"]) await sql`DELETE FROM ${new (await import("../lib/db.js")).Raw(t)}`;
+for (const t of ["review_log", "task_module_evidence", "task_module_state", "module_state", "exam_evidence", "error_patterns", "cards", "unit_checks", "drill_sessions", "drills", "grammar_evidence", "submissions", "quiz_results", "activity_log", "deliveries", "plans", "resource_units", "kv", "skill_estimates", "tts_cache"]) await sql`DELETE FROM ${new (await import("../lib/db.js")).Raw(t)}`;
+await sql`UPDATE learner SET settings = settings - 'stage' WHERE id = 1`;   // a previous run may have left core stage set
 await sql`UPDATE grammar_mastery SET mastery_pct = 0, confidence = 0, evidence_count = 0, status = 'untouched', last_evidence = NULL`;
 
 const seeded = await seedAll();
@@ -233,6 +245,53 @@ assert(wr.clb === 3.5 && wr.validation === "ai_estimate", `writing reads NCLC ${
 assert(projectedScore("listening", 7) === 458 && projectedScore("reading", 7) === 453, "NCLC 7 maps to the IRCC TCF bands (L 458+, R 453+)");
 await sendReadiness(CHAT);
 assert(String(sent.at(-1).text).includes("no full mock yet"), "readiness card states exam validation honestly");
+
+// ---------------------------------------------------------------- core stage: the exam task map + deterministic plan
+const { seedTaskModules, taskBoard, pickTaskModule, recordTaskEvidence, blockingCodes } = await import("../lib/task-modules.js");
+const nModules = await seedTaskModules();
+assert(nModules === 40, `exam task map seeded: ${nModules} modules (L/R/W/S x 10)`);
+assert(Number((await one`SELECT COUNT(*)::int AS n FROM v_task_module_board WHERE state = 'locked'`)!.n) > 30, "modules start locked behind their prerequisites");
+const { ensureEntryPoints } = await import("../lib/task-modules.js");
+await ensureEntryPoints();
+const first = await pickTaskModule({ component: "speaking" });
+assert(first?.row.id === "S01", `scheduler picks the entry module deterministically (${first?.row.id}: ${first?.reason})`);
+
+// prerequisites gate, and grammar is what unlocks the map
+const blocked = await blockingCodes("speaking");
+assert(blocked.some((b) => b.module_id === "S04"), `locked modules name the grammar blocking them (e.g. ${blocked[0]?.module_id} needs ${blocked[0]?.code})`);
+
+// state machine: counted evidence only
+await recordTaskEvidence("S01", { activity: "model", passed: true });
+assert((await one`SELECT state FROM task_module_state WHERE module_id = 'S01'`)!.state === "introduced", "model activity -> introduced");
+await recordTaskEvidence("S01", { activity: "controlled", score_pct: 100 });
+await recordTaskEvidence("S01", { activity: "controlled", score_pct: 100 });
+for (let i = 0; i < 3; i++) await recordTaskEvidence("S01", { activity: "spontaneous", clb: 5, passed: true });
+assert((await one`SELECT state FROM task_module_state WHERE module_id = 'S01'`)!.state === "practicing", "not competent until the timed evidence exists too");
+await recordTaskEvidence("S01", { activity: "timed", passed: true });
+const s1 = await recordTaskEvidence("S01", { activity: "timed", passed: true });
+assert(s1!.to === "competent", `pass rule met -> competent (from ${s1!.from})`);
+await recordTaskEvidence("S01", { activity: "timed", passed: false });
+assert((await one`SELECT state FROM task_module_state WHERE module_id = 'S01'`)!.state === "retaining", "competent -> retaining (a delayed re-check is owed)");
+assert(Number((await one`SELECT COUNT(*)::int AS n FROM task_module_state WHERE module_id = 'S02' AND state <> 'locked'`)!.n) === 1, "passing S01 unlocked S02");
+
+// the core plan is deterministic: no PLANNER call, modules chosen by code
+await sql`UPDATE learner SET settings = settings || '{"stage":"core"}'::jsonb WHERE id = 1`;
+lastGeminiRole = "";
+const core = await buildPlan(localDate((await getLearner()).tz, 1));
+assert(lastGeminiRole !== "PLANNER", "core plan built with NO planning call to Gemini");
+const coreItems = core.plan.slots.flatMap((s) => s.items);
+assert(coreItems.some((i: any) => i.type === "module"), `core plan schedules modules (${coreItems.filter((i: any) => i.type === "module").map((i: any) => i.module_id).join(", ")})`);
+assert(coreItems.some((i: any) => i.type === "drill"), "core plan still drills the blocking grammar in the car");
+assert(/Exam map/.test(String(core.plan.rationale)) && /no planning call/.test(String(core.plan.rationale)), "plan records the map position and that no model chose it");
+
+// executing a module: Gemini runs it, the score moves the state
+const { runModule } = await import("../lib/module-run.js");
+await runModule(CHAT, "L01");
+assert(sent.some((m) => String(m.text).includes("L01")), "module L01 executed and sent");
+for (let i = 0; i < 5; i++) await checks.answer({ mcq: 0, pos: i });
+const l01 = await one`SELECT state, controlled_n FROM task_module_state WHERE module_id = 'L01'`;
+assert(l01!.state !== "locked" && Number(l01!.controlled_n) > 0, `module evidence recorded from the check (state ${l01!.state})`);
+await sql`UPDATE learner SET settings = settings || '{"stage":"beginner"}'::jsonb WHERE id = 1`;
 
 // progress
 await sendProgress(CHAT);

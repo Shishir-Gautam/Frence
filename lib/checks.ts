@@ -177,6 +177,12 @@ async function finish(s: CheckSession): Promise<void> {
     }
     default: tail = "";
   }
+  // a check ordered by an exam task module moves that module's state (deterministically, on the score)
+  if (s.meta?.module_id) {
+    const { attributeToModule } = await import("./module-run.js");
+    const r = await attributeToModule(pct, null, { module_id: s.meta.module_id, activity: s.meta.activity, ref: s.ref });
+    if (r && r.to !== r.from) tail += `${tail ? " " : ""}Module ${s.meta.module_id}: ${r.from} → ${r.to}.`;
+  }
   await logActivity(date, s.env, s.type, mins, true, s.ref);
   await sendMessage(s.chatId, `${passed ? "✅" : "🔁"} <b>${esc(s.title)}: ${ok}/${n} (${pct}%)</b> · ${mins} min\n${esc(tail)}${added ? `\n🃏 ${added} cards added from misses.` : ""}`);
   const { onItemDone, sendMorningCard } = await import("./deliver.js");

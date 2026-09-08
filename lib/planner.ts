@@ -1,10 +1,14 @@
-// Nightly planner: snapshot (grid, FSRS load, resources, history) -> PLANNER role -> plan -> timed deliveries per environment.
-import { sql, one, json, getLearner, plannerSnapshot } from "./db.js";
-import { ask, validCode } from "./coach.js";
+// Nightly planner. Two deterministic paths, no model in either (ARCHITECTURE P2 — the PLANNER prompt is gone):
+//   beginner : the fixed 40-unit ladder (content/curriculum/beginner.json)
+//   core     : the capability matrix (lib/modules.ts) picks the grammar, the exam-task map (lib/task-modules.ts)
+//              picks the task; Gemini is called later, per item, only to EXECUTE what was already chosen.
+import { sql, one, json, getLearner, currentClb } from "./db.js";
+import { validCode } from "./coach.js";
 import { teachable } from "./grammar.js";
 import { nextUnit } from "./units.js";
 import { authorDrill, prerenderDrill } from "./drills.js";
 import { stage } from "./stage.js";
+import { pickTaskModule, nextActivity, unlockTasks, ensureEntryPoints, blockingCodes, taskMapLine } from "./task-modules.js";
 import { localToUtc, localDate, localWeekday } from "./time.js";
 import { updateReceptiveEstimates } from "./grade.js";
 
@@ -17,23 +21,14 @@ export type PlanItem =
   | { type: "speaking"; task: "micro" | "tcf_s1" | "tcf_s2" | "tcf_s3" }
   | { type: "interview"; task: "tcf_s1" | "tcf_s3" }
   | { type: "srs"; count: number }
+  | { type: "module"; module_id: string; component: string; name: string; activity?: string; minutes?: number }
+  | { type: "watch" }
   | { type: "surprise_test" };
 
 export type Plan = {
   focus: string; rationale: string; message_to_learner: string;
   slots: { environment: "patrol" | "driving" | "seated" | "micro"; slot: string; time?: string; minutes: number; items: PlanItem[] }[];
 };
-
-const CONTRACT = `Return JSON:
-{"focus": one line, "rationale": 3-5 lines citing the metrics you used, "message_to_learner": 2-3 sentences (English, concrete metric, what today attacks),
- "slots":[
-  {"environment":"patrol","slot":"patrol","minutes":30,"items":[...]},         // walking: unit (study) from assimil/rfi_jff/innerfrench/francais_authentique, listening_set
-  {"environment":"micro","slot":"srs","minutes":8,"items":[{"type":"srs","count":15}]},   // ONE entry; repeated at each srs time
-  {"environment":"driving","slot":"driving","minutes":25,"items":[...]},       // drill (required daily) + optional unit replay (assimil, mode "replay") or podcast unit
-  {"environment":"seated","slot":"seated","minutes":45,"items":[...]}          // grammar_brief (max 2), writing, speaking or interview, reading_set, assimil unit mode "active"
- ]}
-Item types: {"type":"unit","resource_id","unit_id","title","mode":"study|replay|active"} — unit_id and title MUST come from NEXT UNITS; {"type":"drill","method":"pimsleur|michel_thomas|language_transfer","competency_codes":[1-2 codes],"minutes":15-25}; {"type":"grammar_brief","competency_code"} — codes MUST come from TEACHABLE; {"type":"listening_set"}; {"type":"reading_set"}; {"type":"writing","task":"micro|tcf_w1|tcf_w2|tcf_w3"}; {"type":"speaking","task":"micro|tcf_s1|tcf_s2|tcf_s3"}; {"type":"interview","task":"tcf_s1|tcf_s3"}; {"type":"surprise_test"} (Sundays only).
-Rules: total 120-180 min. Daily: one drill, one graded production item (writing/speaking/interview), and on patrol the next lesson unit: assimil if loaded, otherwise coach_lessons (the beginner ladder). ABSOLUTE-BEGINNER GATE: listening_set / reading_set only when that skill's CLB ≥ 3 (below that, exam-style MCQ in French is noise — use lesson units instead); tcf_* tasks only when that skill's CLB ≥ 4, else micro; interview only when speaking CLB ≥ 4. If placement is not done, keep the day light and say in message_to_learner to run /placement. Podcasts only inside their CLB band and cadence. Grammar: at most 2 competencies/day, from TEACHABLE, and the same codes should drive the drill. If fsrs_load.due_now > 40: add a second micro srs entry and say so. Sunday: lighter, plus surprise_test in seated. A unit with status 'attempted' must be retested (mode study) before a new one.`;
 
 /** Rebuild today's plan (after placement / from-zero), dropping the stale one first. */
 export async function rebuildToday() {
@@ -51,56 +46,100 @@ export async function buildPlan(forDate?: string): Promise<{ date: string; plan:
   await updateReceptiveEstimates();
   try { const { recomputeAll } = await import("./modules.js"); await recomputeAll(); } catch (e) { console.error("module recompute", e); }
   if ((await stage()) === "beginner") return beginnerPlan(date, !forDate);
-  const snap = await plannerSnapshot();
-  // make sure each active feed/course has a concrete next unit the planner can reference
-  const next: any[] = [];
-  const assimilLoaded = snap.unit_stats.some((u: any) => u.resource_id === "assimil");
-  for (const r of snap.resources.filter((r: any) => ["course", "podcast", "news"].includes(r.kind))) {
-    if (r.id === "coach_lessons" && (assimilLoaded || snap.current_clb.listening.clb >= 3)) continue;
-    if (Number(r.clb_min) > snap.current_clb.listening.clb + 1) continue;   // don't ingest feeds far above level
-    try { const u = await nextUnit(r.id); if (u) next.push({ resource_id: r.id, unit_id: Number(u.id), seq: u.seq, title: u.title, status: u.status, attempts: u.attempts, clb_level: u.clb_level }); } catch (e) { console.error("nextUnit", r.id, e); }
-  }
-  const teach = await teachable(6);
+  return corePlan(date, !forDate);
+}
+
+
+/**
+ * CORE PLAN — deterministic. No model is asked what to study, at any point (ARCHITECTURE P2).
+ *
+ * Two axes, both read from code:
+ *   CAPABILITY (lib/modules.ts, content/curriculum/modules.json) — what French you can do. Its weakest cell
+ *                picks the grammar the car drill and the seated brief attack.
+ *   EXAM TASK  (lib/task-modules.ts, content/curriculum/task-modules.json) — which TCF task shape you can hold.
+ *                Its scheduler picks the module; Gemini is called later only to EXECUTE that module.
+ *
+ * The mix shifts towards the exam as the date approaches: >120 days out (or no date) one task module a day,
+ * 60-120 days two, under 60 days two plus a timed one — the language track never disappears, it just narrows.
+ */
+async function corePlan(date: string, nightly: boolean): Promise<{ date: string; plan: Plan }> {
+  const learner = await getLearner();
   const weekday = localWeekday(learner.tz, date);
+  const target = Number(learner.settings?.target_minutes ?? 150);
+  const targetClb = Number(learner.target_clb ?? 7);
   const daysLeft = learner.exam_date ? Math.round((new Date(learner.exam_date).getTime() - Date.now()) / 86400000) : null;
+  const examSlots = daysLeft == null || daysLeft > 120 ? 1 : daysLeft > 60 ? 2 : 3;
 
-  const user = `PLAN ${weekday} ${date}. Day ${snap.days_since_start} of the programme${daysLeft ? `, ${daysLeft} days to the exam` : ", exam not booked"}.
-Straight-line target CLB today: ${Math.min(7, (7 * Math.min(1, Math.max(0, snap.days_since_start) / 240))).toFixed(1)}.
+  await seedTaskModulesIfEmpty();
+  await unlockTasks(); await ensureEntryPoints();
 
-LEARNER STATE:
-${JSON.stringify({ current_clb: snap.current_clb, placement_done: snap.placement_done, minutes_last7: snap.minutes_last7, minutes_14d_by_environment: snap.minutes_14d_by_environment, schedule: snap.schedule, settings: snap.settings })}
+  const clb = await currentClb();
+  const ordered = (["listening", "reading", "writing", "speaking"] as const).slice().sort((a, b) => clb[a].clb - clb[b].clb);
+  const picks: any[] = [];
+  for (const comp of ordered) {
+    if (picks.length >= examSlots) break;
+    const p = await pickTaskModule({ component: comp, target: targetClb });
+    if (p) picks.push(p);
+  }
+  const asItem = (p: any): PlanItem[] => p ? [{ type: "module", module_id: String(p.row.id), component: String(p.row.component), name: String(p.row.name), activity: nextActivity(p.row), minutes: Number(p.row.minutes) }] : [];
 
-GRAMMAR GRID (weakest first, with priority):
-${JSON.stringify(snap.grammar_grid_weakest_first)}
-TEACHABLE NOW (prerequisites met):
-${JSON.stringify(teach)}
+  // capability axis: the weakest (module, skill) cell decides the grammar; fall back to the grid's own ranking
+  let bottleneckLine = "";
+  let gcode: string | undefined;
+  try {
+    const { bottleneck } = await import("./modules.js");
+    const b = await bottleneck();
+    if (b) { bottleneckLine = `${b.module.name} (${b.cell.skill})`; gcode = b.module.competency_codes.find((c: string) => validCode(c)); }
+  } catch (e) { console.error("bottleneck", e); }
+  const blocking = await blockingCodes();
+  const teach = await teachable(6);
+  if (!gcode || !teach.some((t: any) => t.code === gcode))
+    gcode = blocking.find((x) => teach.some((t: any) => t.code === x.code))?.code ?? teach[0]?.code;
 
-FSRS LOAD: ${JSON.stringify(snap.fsrs_load)}
+  // input stream on patrol: whatever the resource router has next at this level
+  const next: any[] = [];
+  for (const r of await sql`SELECT id, clb_min FROM resources WHERE active AND kind IN ('course','podcast','news') ORDER BY priority`) {
+    if (Number(r.clb_min) > clb.listening.clb + 1) continue;
+    try { const u = await nextUnit(String(r.id)); if (u) { next.push({ resource_id: r.id, unit_id: Number(u.id), title: u.title }); break; } } catch (e) { console.error("nextUnit", r.id, e); }
+  }
 
-RESOURCE LIBRARY:
-${JSON.stringify(snap.resources)}
-NEXT UNITS (the only unit_ids you may schedule):
-${JSON.stringify(next)}
-UNIT STATS: ${JSON.stringify(snap.unit_stats)}
+  const receptive = picks.filter((p) => ["listening", "reading"].includes(String(p.row.component)));
+  const productive = picks.filter((p) => ["writing", "speaking"].includes(String(p.row.component)));
+  const patrol: PlanItem[] = [
+    ...next.slice(0, 1).map((n) => ({ type: "unit" as const, resource_id: n.resource_id, unit_id: n.unit_id, title: n.title, mode: "study" as const })),
+    ...receptive.flatMap((p) => asItem(p)),
+  ];
+  const seated: PlanItem[] = [...productive.flatMap((p) => asItem(p))];
+  if (gcode) seated.push({ type: "grammar_brief", competency_code: gcode });
+  if (weekday === "Sunday") seated.push({ type: "surprise_test" });
 
-RECENT HISTORY:
-submissions: ${JSON.stringify(snap.recent_submissions)}
-unit checks: ${JSON.stringify(snap.recent_unit_checks)}
-drills: ${JSON.stringify(snap.recent_drills)}
-quiz accuracy by CLB: ${JSON.stringify(snap.quiz_accuracy_by_clb)}
-error patterns: ${JSON.stringify(snap.error_patterns)}
-last plans: ${JSON.stringify(snap.last_plans)}
-delivery outcomes (7d): ${JSON.stringify(snap.delivery_outcomes_7d)}
+  const slots: Plan["slots"] = [
+    { environment: "patrol", slot: "patrol", minutes: target >= 120 ? 35 : 25, items: patrol },
+    { environment: "micro", slot: "srs", minutes: 8, items: [{ type: "srs", count: target >= 120 ? 15 : 12 }] },
+    { environment: "driving", slot: "driving", minutes: target >= 120 ? 20 : 14, items: [{ type: "drill", method: "pimsleur", competency_codes: gcode ? [gcode] : ["TNS_PRESENT_IRREG"], minutes: target >= 120 ? 16 : 11 }] },
+    { environment: "seated", slot: "seated", minutes: 20 + seated.length * 8, items: seated },
+  ];
+  if (weekday === "Saturday" || weekday === "Sunday") slots[0].items.push({ type: "watch" });
 
-${CONTRACT}`;
-
-  const plan = await ask<Plan>("PLANNER", user, { temperature: 0.35 });
-  validate(plan, next, teach, snap.current_clb);
-  if (!forDate) await preauthor(plan);        // nightly run only; /today and /replan stay fast
-  await sql`INSERT INTO plans (plan_date, plan, inputs_digest) VALUES (${date}, ${json(plan)}::jsonb, ${json({ clb: snap.current_clb, fsrs: snap.fsrs_load, teach: teach.map((t: any) => t.code), next })}::jsonb)
+  const map = await taskMapLine();
+  const lead = picks[0];
+  const plan: Plan = {
+    focus: lead ? `${String(lead.row.id)} — ${String(lead.row.name)} (${lead.reason})` : "Consolidation",
+    rationale: `Deterministic plan, no planning call. Exam map ${map}; ${examSlots} task module${examSlots > 1 ? "s" : ""} today (${daysLeft == null ? "no exam date" : daysLeft + " days out"}). ` +
+      `${bottleneckLine ? `Capability bottleneck: ${bottleneckLine}. ` : ""}${gcode ? `Grammar ${gcode}${blocking.some((b) => b.code === gcode) ? " is blocking the next task module" : ""}.` : ""}`,
+    message_to_learner: `${map} on the exam map. Today: ${picks.map((p) => `${p.row.id} ${String(p.row.name).toLowerCase()}`).join(", ") || "consolidation"}${gcode ? `, and ${gcode.toLowerCase().replace(/_/g, " ")} in the car` : ""}. Nothing to choose — it arrives.`,
+    slots: slots.filter((s) => s.items.length),
+  };
+  if (nightly) await preauthor(plan);
+  await sql`INSERT INTO plans (plan_date, plan, inputs_digest) VALUES (${date}, ${json(plan)}::jsonb, ${json({ stage: "core", map, modules: picks.map((p) => p.row.id), gcode, bottleneck: bottleneckLine, days_left: daysLeft })}::jsonb)
             ON CONFLICT (plan_date) DO UPDATE SET plan = EXCLUDED.plan, inputs_digest = EXCLUDED.inputs_digest, created_at = now()`;
   await materialise(date, plan);
   return { date, plan };
+}
+
+async function seedTaskModulesIfEmpty() {
+  const n = await one`SELECT COUNT(*)::int AS n FROM task_modules`;
+  if (!Number(n?.n ?? 0)) { const { seedTaskModules } = await import("./task-modules.js"); await seedTaskModules(); }
 }
 
 /**
@@ -150,44 +189,6 @@ async function beginnerPlan(date: string, nightly: boolean): Promise<{ date: str
             ON CONFLICT (plan_date) DO UPDATE SET plan = EXCLUDED.plan, inputs_digest = EXCLUDED.inputs_digest, created_at = now()`;
   await materialise(date, plan);
   return { date, plan };
-}
-
-function validate(plan: Plan, next: any[], teach: any[], clb: Record<string, { clb: number }>) {
-  const unitIds = new Set(next.map((n) => n.unit_id));
-  const codes = new Set(teach.map((t: any) => t.code));
-  for (const s of plan.slots ?? []) {
-    s.items = (s.items ?? []).flatMap((it): PlanItem[] => {
-      if (it.type === "unit") { const n = next.find((x) => x.unit_id === it.unit_id); return n ? [{ ...it, title: n.title ?? it.title }] : []; }
-      if (it.type === "grammar_brief") return codes.has(it.competency_code) ? [it] : [];
-      if (it.type === "drill") {
-        const cc = (it.competency_codes ?? []).filter(validCode).slice(0, 2);
-        if (!cc.length) cc.push(...(teach[0] ? [teach[0].code] : []));
-        if (!cc.length) return [];
-        const method = ["pimsleur", "michel_thomas", "language_transfer"].includes(it.method) ? it.method : "pimsleur";
-        return [{ ...it, method, competency_codes: cc, minutes: Math.min(20, Math.max(8, Number(it.minutes) || 12)) }];
-      }
-      if (it.type === "srs") return [{ type: "srs", count: Math.min(40, Math.max(5, Number(it.count) || 15)) }];
-      if (it.type === "listening_set") return clb.listening.clb >= 3 ? [it] : [];
-      if (it.type === "reading_set") return clb.reading.clb >= 3 ? [it] : [];
-      if (it.type === "writing" && it.task !== "micro" && clb.writing.clb < 4) return [{ type: "writing", task: "micro" }];
-      if (it.type === "speaking" && it.task !== "micro" && clb.speaking.clb < 4) return [{ type: "speaking", task: "micro" }];
-      if (it.type === "interview" && clb.speaking.clb < 4) return [{ type: "speaking", task: "micro" }];
-      return [it];
-    });
-  }
-  // the patrol slot must carry a lesson unit when one is available (the planner sometimes drops it)
-  const lesson = next.find((n) => n.resource_id === "assimil") ?? next.find((n) => n.resource_id === "coach_lessons");
-  let patrol = plan.slots.find((s) => s.environment === "patrol");
-  if (!patrol && lesson) { patrol = { environment: "patrol", slot: "patrol", minutes: 30, items: [] }; plan.slots.unshift(patrol); }
-  if (patrol && lesson && !patrol.items.some((i) => i.type === "unit")) patrol.items.unshift({ type: "unit", resource_id: lesson.resource_id, unit_id: lesson.unit_id, title: lesson.title, mode: "study" });
-  for (const s of plan.slots) {
-    if (s.time && !/^\d{2}:\d{2}$/.test(s.time)) delete s.time;
-    s.minutes = Math.max(5, Number(s.minutes) || 20);
-    if (!["patrol", "driving", "seated", "micro"].includes(s.environment)) s.environment = "seated";
-  }
-  plan.slots = plan.slots.filter((s) => s.items.length);
-  plan.focus = String(plan.focus ?? ""); plan.message_to_learner = String(plan.message_to_learner ?? "");
-  if (!plan.slots?.length) throw new Error("planner returned no slots");
 }
 
 /** Nightly: author + render tomorrow's drills now so the driving delivery is instant and can't time out. */

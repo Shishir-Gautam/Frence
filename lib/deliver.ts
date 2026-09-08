@@ -90,8 +90,10 @@ export async function onItemDone(kind: string) {
   const q = await queueInfo();
   const cur = q?.current?.type;
   const matches: Record<string, string[]> = {
-    unit_gate: ["unit"], grammar_test: ["grammar_brief"], listening_set: ["listening_set"], reading_set: ["reading_set"], surprise: ["surprise_test"],
-    writing: ["writing"], speaking: ["speaking"], interview: ["interview", "speaking"], srs: ["srs"],
+    unit_gate: ["unit"], grammar_test: ["grammar_brief", "module"], surprise: ["surprise_test"],
+    listening_set: ["listening_set", "module"], reading_set: ["reading_set", "module"],
+    writing: ["writing", "module"], speaking: ["speaking", "module"], interview: ["interview", "speaking"], srs: ["srs"],
+    module: ["module"], watch: ["watch"],
   };
   const ok = !!cur && (matches[kind] ?? []).includes(cur);
   await itemDone(ok ? sendQueued : async () => {}, (chatId, n) => startSession(chatId, n, "micro", "🃏 Now your queued cards."));
@@ -107,6 +109,8 @@ export async function sendItem(chatId: number, it: PlanItem, env: string, delive
       return sendDrill(chatId, id, deliveryId);
     }
     case "grammar_brief": return sendGrammarBrief(chatId, it.competency_code, deliveryId);
+    case "module": { const { runModule } = await import("./module-run.js"); return runModule(chatId, it.module_id, it.activity as any, deliveryId); }
+    case "watch": { const { sendWatch } = await import("./module-run.js"); return sendWatch(chatId, deliveryId); }
     case "listening_set": return sendListeningSet(chatId, env, deliveryId);
     case "reading_set": return sendReadingSet(chatId, env, deliveryId);
     case "writing": return sendWritingTask(chatId, it.task, deliveryId);
@@ -163,6 +167,8 @@ export function label(i: PlanItem | undefined): string {
     case "speaking": return `Speaking ${i.task === "micro" ? "micro" : "TCF " + String(i.task).slice(4).toUpperCase()}`;
     case "interview": return `Interview (TCF ${String(i.task).slice(4).toUpperCase()})`;
     case "srs": return `${i.count} cards`;
+    case "module": return `${i.module_id} ${i.name}${i.activity ? ` — ${String(i.activity).replace("_", " ")}` : ""}`;
+    case "watch": return "Watch something French";
     case "surprise_test": return "Surprise retention test";
     default: return String((i as any).type ?? "item");
   }

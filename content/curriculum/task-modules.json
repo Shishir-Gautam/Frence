@@ -1,0 +1,1484 @@
+{
+ "version": 1,
+ "note": "Exam TASK modules — the second axis. content/curriculum/modules.json holds the CAPABILITY axis (what you can do in French, joined to the 40-unit ladder and the grammar grid); this file holds the EXAM axis: 40 task modules (L01-L10, R01-R10, W01-W10, S01-S10) whose taxonomy is the CLB 2012 competency areas crossed with the fixed TCF Canada format (39+39 MCQ, 3+3 tasks). A task module is a reusable capability, not a lesson: S07 generates a different task every time. Gemini executes a task module; it never chooses or invents one. prereq_codes are grammar-grid codes; a module unlocks when its prerequisite modules are competent and those codes are >=60%.",
+ "states": [
+  "locked",
+  "available",
+  "introduced",
+  "practicing",
+  "competent",
+  "retaining",
+  "mastered",
+  "maintenance"
+ ],
+ "modules": [
+  {
+   "id": "L01",
+   "component": "listening",
+   "seq": 1,
+   "name": "Basic information in short exchanges",
+   "clb_area": "I_interacting",
+   "can_do": "Identify who, what, where, when and how much in a short, slow exchange on a familiar everyday topic.",
+   "nclc": 4,
+   "tcf_task": null,
+   "tcf_items": "1-8",
+   "prereq_modules": [],
+   "prereq_codes": [
+    "DET_ARTICLES",
+    "TNS_PRESENT_IRREG"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "misses numbers, dates and prices",
+    "loses the answer when the speaker paraphrases the question stem"
+   ],
+   "environments": [
+    "patrol",
+    "driving"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "L02",
+   "component": "listening",
+   "seq": 2,
+   "name": "Short dialogues: gist and role",
+   "clb_area": "I_interacting",
+   "can_do": "Follow a short two-person dialogue at moderate speed: who the speakers are to each other, what they want, whether they agree.",
+   "nclc": 4,
+   "tcf_task": null,
+   "tcf_items": "1-10",
+   "prereq_modules": [
+    "L01"
+   ],
+   "prereq_codes": [
+    "INT_TROIS_FORMES",
+    "NEG_BASE"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "cannot say which speaker wants what",
+    "misses negation and so reverses the answer"
+   ],
+   "environments": [
+    "patrol",
+    "driving"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "L03",
+   "component": "listening",
+   "seq": 3,
+   "name": "Instructions, directions and announcements",
+   "clb_area": "II_instructions",
+   "can_do": "Follow spoken instructions, directions and public announcements (station, store, workplace) and act on the detail.",
+   "nclc": 5,
+   "tcf_task": null,
+   "tcf_items": "8-16",
+   "prereq_modules": [
+    "L02"
+   ],
+   "prereq_codes": [
+    "MOOD_IMPERATIF",
+    "SYN_PREPOSITIONS_LIEU_TEMPS"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "confuses sequence words (d'abord, ensuite, puis)",
+    "misses prepositions of place"
+   ],
+   "environments": [
+    "patrol",
+    "driving"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "L04",
+   "component": "listening",
+   "seq": 4,
+   "name": "Specific detail under time pressure",
+   "clb_area": "IV_information",
+   "can_do": "Catch one required detail (a time, a reason, a condition) in a passage played once, without understanding every word.",
+   "nclc": 5,
+   "tcf_task": null,
+   "tcf_items": "10-20",
+   "prereq_modules": [
+    "L03"
+   ],
+   "prereq_codes": [
+    "TNS_INDICATEURS_TEMPS",
+    "CON_BASE"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "tries to translate every word and loses the item",
+    "cannot recover after an unknown word"
+   ],
+   "environments": [
+    "patrol",
+    "driving"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "L05",
+   "component": "listening",
+   "seq": 5,
+   "name": "Speaker intent and attitude",
+   "clb_area": "I_interacting",
+   "can_do": "Tell what a speaker is doing with their words — complaining, suggesting, refusing politely, hesitating — not just what they said.",
+   "nclc": 6,
+   "tcf_task": null,
+   "tcf_items": "16-26",
+   "prereq_modules": [
+    "L04"
+   ],
+   "prereq_codes": [
+    "MOOD_COND_PRES",
+    "CON_OPINION"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "reads polite conditional as literal statement",
+    "misses ironic or reluctant tone"
+   ],
+   "environments": [
+    "patrol",
+    "driving"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "L06",
+   "component": "listening",
+   "seq": 6,
+   "name": "Spoken register and reductions",
+   "clb_area": "I_interacting",
+   "can_do": "Understand natural spoken French: dropped ne, on for nous, elision, liaison, contracted forms (j'sais pas, t'as, y'a, chuis).",
+   "nclc": 6,
+   "tcf_task": null,
+   "tcf_items": "16-28",
+   "prereq_modules": [
+    "L04"
+   ],
+   "prereq_codes": [
+    "PRO_SUJET_TONIQUE",
+    "NEG_BASE"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "only understands careful textbook speech",
+    "misses the negative when ne is dropped"
+   ],
+   "environments": [
+    "patrol",
+    "driving"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "L07",
+   "component": "listening",
+   "seq": 7,
+   "name": "Radio-style reports and interviews",
+   "clb_area": "IV_information",
+   "can_do": "Follow the main line of a short radio report or interview on a current topic and identify the two or three supporting facts.",
+   "nclc": 6,
+   "tcf_task": null,
+   "tcf_items": "20-30",
+   "prereq_modules": [
+    "L05",
+    "L06"
+   ],
+   "prereq_codes": [
+    "TNS_PC_VS_IMP",
+    "CON_CAUSE_CONSEQUENCE"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "gets topic but not the argument",
+    "loses track across a change of speaker"
+   ],
+   "environments": [
+    "patrol",
+    "driving"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "L08",
+   "component": "listening",
+   "seq": 8,
+   "name": "Opinion, agreement and disagreement",
+   "clb_area": "IV_information",
+   "can_do": "Distinguish several speakers' positions on one issue, including concession and partial agreement, and identify who holds which view.",
+   "nclc": 7,
+   "tcf_task": null,
+   "tcf_items": "24-34",
+   "prereq_modules": [
+    "L07"
+   ],
+   "prereq_codes": [
+    "CON_OPPOSITION_CONCESSION",
+    "MOOD_SUBJ_PRES"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "treats a concession (certes… mais) as agreement",
+    "cannot attribute a view to the right speaker"
+   ],
+   "environments": [
+    "patrol",
+    "driving"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "L09",
+   "component": "listening",
+   "seq": 9,
+   "name": "Inference and implied meaning",
+   "clb_area": "IV_information",
+   "can_do": "Infer what is meant but not said: cause, consequence, condition, an unstated conclusion, a hint of doubt.",
+   "nclc": 7,
+   "tcf_task": null,
+   "tcf_items": "28-36",
+   "prereq_modules": [
+    "L08"
+   ],
+   "prereq_codes": [
+    "MOOD_SI_HYPOTHESE",
+    "CON_BUT_CONDITION"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "answers from a word that appears in the audio (distractor bait)",
+    "cannot justify the choice"
+   ],
+   "environments": [
+    "patrol",
+    "driving"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "L10",
+   "component": "listening",
+   "seq": 10,
+   "name": "TCF listening under exam conditions",
+   "clb_area": "IV_information",
+   "can_do": "Sustain accuracy across 39 progressive items in 35 minutes, audio played once, without re-listening or lingering on a lost item.",
+   "nclc": 8,
+   "tcf_task": null,
+   "tcf_items": "all 39",
+   "prereq_modules": [
+    "L09"
+   ],
+   "prereq_codes": [],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "accuracy collapses after item 25",
+    "spends too long on a C1/C2 item and loses easier points"
+   ],
+   "environments": [
+    "patrol",
+    "driving"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "R01",
+   "component": "reading",
+   "seq": 1,
+   "name": "Signs, notices and short instructions",
+   "clb_area": "II_instructions",
+   "can_do": "Read signs, opening hours, safety notices and short instructions and act on them correctly.",
+   "nclc": 4,
+   "tcf_task": null,
+   "tcf_items": "1-8",
+   "prereq_modules": [],
+   "prereq_codes": [
+    "DET_ARTICLES",
+    "MOOD_IMPERATIF"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "misreads an interdiction as a permission",
+    "misses défense de / interdit / sauf"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "R02",
+   "component": "reading",
+   "seq": 2,
+   "name": "Personal messages",
+   "clb_area": "I_interacting",
+   "can_do": "Understand a short personal message or text: what is being asked, arranged, or cancelled, and what reply is expected.",
+   "nclc": 4,
+   "tcf_task": null,
+   "tcf_items": "4-12",
+   "prereq_modules": [
+    "R01"
+   ],
+   "prereq_codes": [
+    "TNS_FUTUR_PROCHE",
+    "INT_MOTS_INTERROGATIFS"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "misses the request buried in a friendly message",
+    "confuses proposed and confirmed arrangements"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "R03",
+   "component": "reading",
+   "seq": 3,
+   "name": "Ads, listings and service texts",
+   "clb_area": "III_getting_things_done",
+   "can_do": "Scan an ad, a listing or a service page for the one condition that matters (price, eligibility, deadline, exclusion).",
+   "nclc": 5,
+   "tcf_task": null,
+   "tcf_items": "8-16",
+   "prereq_modules": [
+    "R02"
+   ],
+   "prereq_codes": [
+    "DET_PARTITIF_QUANTITE",
+    "SYN_COMPARATIF_SUPERLATIF"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "misses hors charges, sous réserve de, à partir de",
+    "picks the first plausible number"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "R04",
+   "component": "reading",
+   "seq": 4,
+   "name": "Emails and workplace correspondence",
+   "clb_area": "III_getting_things_done",
+   "can_do": "Read a workplace or administrative email: the purpose, the action required of you, the deadline, the register.",
+   "nclc": 5,
+   "tcf_task": null,
+   "tcf_items": "10-20",
+   "prereq_modules": [
+    "R03"
+   ],
+   "prereq_codes": [
+    "MOOD_COND_PRES",
+    "SYN_VERBE_PREP_INF"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "misses a polite request phrased as conditional",
+    "cannot tell formal from informal register"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "R05",
+   "component": "reading",
+   "seq": 5,
+   "name": "Short informational texts",
+   "clb_area": "IV_information",
+   "can_do": "Get the main point and two supporting details from a short factual text (news brief, leaflet, how-it-works page).",
+   "nclc": 6,
+   "tcf_task": null,
+   "tcf_items": "14-24",
+   "prereq_modules": [
+    "R04"
+   ],
+   "prereq_codes": [
+    "TNS_PC_VS_IMP",
+    "PRO_RELATIFS_SIMPLES"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "reads word by word and runs out of time",
+    "cannot separate main claim from example"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "R06",
+   "component": "reading",
+   "seq": 6,
+   "name": "Referents and cohesion",
+   "clb_area": "IV_information",
+   "can_do": "Track what celui-ci, ce dernier, y, en, dont and cela refer back to across a paragraph.",
+   "nclc": 6,
+   "tcf_task": null,
+   "tcf_items": "18-28",
+   "prereq_modules": [
+    "R05"
+   ],
+   "prereq_codes": [
+    "PRO_Y_EN",
+    "PRO_RELATIFS_AVANCES"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "attaches a pronoun to the wrong noun",
+    "loses the thread across sentences"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "R07",
+   "component": "reading",
+   "seq": 7,
+   "name": "Opinion columns and stance",
+   "clb_area": "IV_information",
+   "can_do": "Identify an author's position, the view they are arguing against, and the strength of their commitment to it.",
+   "nclc": 7,
+   "tcf_task": null,
+   "tcf_items": "24-32",
+   "prereq_modules": [
+    "R06"
+   ],
+   "prereq_codes": [
+    "CON_OPINION",
+    "CON_OPPOSITION_CONCESSION"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "mistakes a reported opposing view for the author's own",
+    "misses hedging (semble, aurait, sans doute)"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "R08",
+   "component": "reading",
+   "seq": 8,
+   "name": "Implicit meaning and inference",
+   "clb_area": "IV_information",
+   "can_do": "Draw a conclusion the text implies but does not state, and reject the distractor that merely repeats text vocabulary.",
+   "nclc": 7,
+   "tcf_task": null,
+   "tcf_items": "26-34",
+   "prereq_modules": [
+    "R07"
+   ],
+   "prereq_codes": [
+    "MOOD_SI_HYPOTHESE",
+    "SYN_DISCOURS_INDIRECT"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "chooses the option with the most shared words",
+    "over-infers beyond what the text supports"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "R09",
+   "component": "reading",
+   "seq": 9,
+   "name": "Argument structure across a long text",
+   "clb_area": "IV_information",
+   "can_do": "Map a longer argument: thesis, concession, counter-argument, conclusion — and locate where each turn happens.",
+   "nclc": 8,
+   "tcf_task": null,
+   "tcf_items": "30-38",
+   "prereq_modules": [
+    "R08"
+   ],
+   "prereq_codes": [
+    "CON_BUT_CONDITION",
+    "SYN_PASSIF_ON"
+   ],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "cannot say where the argument turns",
+    "summarises the topic instead of the argument"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "R10",
+   "component": "reading",
+   "seq": 10,
+   "name": "TCF reading under exam conditions",
+   "clb_area": "IV_information",
+   "can_do": "Sustain 39 items in 60 minutes: skim the question first, scan the text, answer and move on within ~90 seconds.",
+   "nclc": 8,
+   "tcf_task": null,
+   "tcf_items": "all 39",
+   "prereq_modules": [
+    "R09"
+   ],
+   "prereq_codes": [],
+   "activities": [
+    "comprehension",
+    "detail_hunt",
+    "timed_set"
+   ],
+   "evidence": {
+    "items": 12,
+    "accuracy": 0.75,
+    "sessions": 2
+   },
+   "fail_signals": [
+    "runs out of time before the last items",
+    "re-reads whole texts"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 20
+  },
+  {
+   "id": "W01",
+   "component": "writing",
+   "seq": 1,
+   "name": "Short personal message",
+   "clb_area": "I_interacting",
+   "can_do": "Write a short message to someone you know: greet, say the one thing, close appropriately (60-120 words).",
+   "nclc": 4,
+   "tcf_task": "tcf_w1",
+   "tcf_items": null,
+   "prereq_modules": [],
+   "prereq_codes": [
+    "TNS_PRESENT_IRREG",
+    "DET_ARTICLES"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "no greeting or closing",
+    "under the word count"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "W02",
+   "component": "writing",
+   "seq": 2,
+   "name": "Describe an event or experience",
+   "clb_area": "IV_information",
+   "can_do": "Narrate something that happened: sequence in the past, when and where, how it felt (60-120 words).",
+   "nclc": 5,
+   "tcf_task": "tcf_w1",
+   "tcf_items": null,
+   "prereq_modules": [
+    "W01"
+   ],
+   "prereq_codes": [
+    "TNS_PASSE_COMP",
+    "TNS_IMPARFAIT",
+    "AGR_PP_ETRE"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "present tense throughout",
+    "passé composé and imparfait used interchangeably"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "W03",
+   "component": "writing",
+   "seq": 3,
+   "name": "Request information or make arrangements",
+   "clb_area": "III_getting_things_done",
+   "can_do": "Write to ask for information, book, invite or change an arrangement, with correctly formed questions and polite register.",
+   "nclc": 5,
+   "tcf_task": "tcf_w1",
+   "tcf_items": null,
+   "prereq_modules": [
+    "W02"
+   ],
+   "prereq_codes": [
+    "INT_TROIS_FORMES",
+    "MOOD_COND_PRES"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "questions built by intonation only in writing",
+    "tu/vous register slips"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "W04",
+   "component": "writing",
+   "seq": 4,
+   "name": "Explain a problem and ask for a remedy",
+   "clb_area": "III_getting_things_done",
+   "can_do": "Describe a problem clearly to someone who was not there, say what you expect to happen, keep a formal tone.",
+   "nclc": 6,
+   "tcf_task": "tcf_w2",
+   "tcf_items": null,
+   "prereq_modules": [
+    "W03"
+   ],
+   "prereq_codes": [
+    "CON_CAUSE_CONSEQUENCE",
+    "SYN_VERBE_PREP_INF"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "complains without stating the request",
+    "informal register in a formal letter"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "W05",
+   "component": "writing",
+   "seq": 5,
+   "name": "State an opinion",
+   "clb_area": "IV_information",
+   "can_do": "Say what you think about a familiar issue and give two reasons, using opinion structures rather than 'je pense que' four times.",
+   "nclc": 6,
+   "tcf_task": "tcf_w3",
+   "tcf_items": null,
+   "prereq_modules": [
+    "W04"
+   ],
+   "prereq_codes": [
+    "CON_OPINION",
+    "MOOD_SUBJ_PRES"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "one structure repeated",
+    "reasons asserted with no support"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "W06",
+   "component": "writing",
+   "seq": 6,
+   "name": "Justify with examples",
+   "clb_area": "IV_information",
+   "can_do": "Support each claim with a concrete example or consequence, linked with cause/consequence connectors.",
+   "nclc": 7,
+   "tcf_task": "tcf_w3",
+   "tcf_items": null,
+   "prereq_modules": [
+    "W05"
+   ],
+   "prereq_codes": [
+    "CON_CAUSE_CONSEQUENCE",
+    "TNS_FUTUR_SIMPLE"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "examples missing or generic",
+    "connectors absent or all 'parce que'"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "W07",
+   "component": "writing",
+   "seq": 7,
+   "name": "Compare two positions",
+   "clb_area": "IV_information",
+   "can_do": "Present two given viewpoints fairly, then place your own between or against them (the actual TCF task 3 shape).",
+   "nclc": 7,
+   "tcf_task": "tcf_w3",
+   "tcf_items": null,
+   "prereq_modules": [
+    "W06"
+   ],
+   "prereq_codes": [
+    "CON_OPPOSITION_CONCESSION",
+    "SYN_DISCOURS_INDIRECT"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "summarises only one text",
+    "own position never stated"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "W08",
+   "component": "writing",
+   "seq": 8,
+   "name": "Organise an argued text",
+   "clb_area": "IV_information",
+   "can_do": "Structure 120-180 words as intro reframing the debate, one paragraph per view, argued position, conclusion.",
+   "nclc": 7,
+   "tcf_task": "tcf_w3",
+   "tcf_items": null,
+   "prereq_modules": [
+    "W07"
+   ],
+   "prereq_codes": [
+    "CON_ORGANISATION",
+    "CON_BUT_CONDITION"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "one undivided block of text",
+    "conclusion repeats the introduction"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "W09",
+   "component": "writing",
+   "seq": 9,
+   "name": "Formal register and accuracy under proofreading",
+   "clb_area": "III_getting_things_done",
+   "can_do": "Hold formal register and catch your own agreement and verb-ending errors in a final read-through.",
+   "nclc": 8,
+   "tcf_task": "tcf_w2",
+   "tcf_items": null,
+   "prereq_modules": [
+    "W08"
+   ],
+   "prereq_codes": [
+    "AGR_PP_AVOIR_COD",
+    "AGR_SUJET_VERBE",
+    "SYN_PASSIF_ON"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "accord errors survive proofreading",
+    "spoken forms (on, ça, du coup) in a formal text"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "W10",
+   "component": "writing",
+   "seq": 10,
+   "name": "TCF writing under exam conditions",
+   "clb_area": "IV_information",
+   "can_do": "Produce all three tasks in 60 minutes, inside the word counts, with time left to proofread.",
+   "nclc": 8,
+   "tcf_task": "tcf_w3",
+   "tcf_items": null,
+   "prereq_modules": [
+    "W09"
+   ],
+   "prereq_codes": [],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "task 3 unfinished",
+    "word counts missed"
+   ],
+   "environments": [
+    "seated"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "S01",
+   "component": "speaking",
+   "seq": 1,
+   "name": "Introduce yourself",
+   "clb_area": "I_interacting",
+   "can_do": "Talk about yourself for 90 seconds without stopping: name, origin, work, life in Toronto, why French.",
+   "nclc": 4,
+   "tcf_task": "tcf_s1",
+   "tcf_items": null,
+   "prereq_modules": [],
+   "prereq_codes": [
+    "TNS_PRESENT_IRREG",
+    "PRO_SUJET_TONIQUE"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "stops after two sentences",
+    "long silences while searching for a word"
+   ],
+   "environments": [
+    "seated",
+    "driving"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "S02",
+   "component": "speaking",
+   "seq": 2,
+   "name": "Answer simple questions about yourself",
+   "clb_area": "I_interacting",
+   "can_do": "Answer an examiner's follow-up questions in full sentences, without needing the question repeated.",
+   "nclc": 4,
+   "tcf_task": "tcf_s1",
+   "tcf_items": null,
+   "prereq_modules": [
+    "S01"
+   ],
+   "prereq_codes": [
+    "INT_MOTS_INTERROGATIFS",
+    "NEG_BASE"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "one-word answers",
+    "asks for repetition on every question"
+   ],
+   "environments": [
+    "seated",
+    "driving"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "S03",
+   "component": "speaking",
+   "seq": 3,
+   "name": "Describe and narrate",
+   "clb_area": "IV_information",
+   "can_do": "Describe a place, a routine or something that happened, in the right tense, for a minute or more.",
+   "nclc": 5,
+   "tcf_task": "tcf_s1",
+   "tcf_items": null,
+   "prereq_modules": [
+    "S02"
+   ],
+   "prereq_codes": [
+    "TNS_PASSE_COMP",
+    "TNS_IMPARFAIT",
+    "AGR_ADJ_GENRE_NOMBRE"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "narrates in the present",
+    "adjectives left unagreed"
+   ],
+   "environments": [
+    "seated",
+    "driving"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "S04",
+   "component": "speaking",
+   "seq": 4,
+   "name": "Ask for information (TCF task 2)",
+   "clb_area": "III_getting_things_done",
+   "can_do": "Drive the conversation by asking well-formed questions to obtain information in a scenario — the task most candidates lose points on.",
+   "nclc": 6,
+   "tcf_task": "tcf_s2",
+   "tcf_items": null,
+   "prereq_modules": [
+    "S03"
+   ],
+   "prereq_codes": [
+    "INT_TROIS_FORMES",
+    "INT_MOTS_INTERROGATIFS",
+    "MOOD_COND_PRES"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "answers instead of asking",
+    "questions by intonation only",
+    "runs out of questions before 5 minutes"
+   ],
+   "environments": [
+    "seated",
+    "driving"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "S05",
+   "component": "speaking",
+   "seq": 5,
+   "name": "Keep a conversation going",
+   "clb_area": "I_interacting",
+   "can_do": "React, follow up, ask a further question, and repair a misunderstanding without switching to English.",
+   "nclc": 6,
+   "tcf_task": "tcf_s2",
+   "tcf_items": null,
+   "prereq_modules": [
+    "S04"
+   ],
+   "prereq_codes": [
+    "PRO_COD_COI",
+    "CON_BASE"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "conversation dies after the scripted questions",
+    "freezes on an unexpected answer"
+   ],
+   "environments": [
+    "seated",
+    "driving"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "S06",
+   "component": "speaking",
+   "seq": 6,
+   "name": "Explain an experience or a process",
+   "clb_area": "IV_information",
+   "can_do": "Explain how something works or how something went, in ordered steps, for two minutes.",
+   "nclc": 6,
+   "tcf_task": "tcf_s3",
+   "tcf_items": null,
+   "prereq_modules": [
+    "S05"
+   ],
+   "prereq_codes": [
+    "CON_ORGANISATION",
+    "SYN_VERBE_PREP_INF"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "jumps between points",
+    "no sequencing markers"
+   ],
+   "environments": [
+    "seated",
+    "driving"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "S07",
+   "component": "speaking",
+   "seq": 7,
+   "name": "Express an opinion",
+   "clb_area": "IV_information",
+   "can_do": "State a position on an unfamiliar topic with no preparation time and support it with two reasons.",
+   "nclc": 7,
+   "tcf_task": "tcf_s3",
+   "tcf_items": null,
+   "prereq_modules": [
+    "S06"
+   ],
+   "prereq_codes": [
+    "CON_OPINION",
+    "MOOD_SUBJ_PRES",
+    "MOOD_COND_PRES"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "long hesitation before starting",
+    "opinion stated but never supported",
+    "vocabulary range too narrow for the topic"
+   ],
+   "environments": [
+    "seated",
+    "driving"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "S08",
+   "component": "speaking",
+   "seq": 8,
+   "name": "Justify and concede",
+   "clb_area": "IV_information",
+   "can_do": "Defend a position, acknowledge the opposing view, and answer an objection without abandoning your line.",
+   "nclc": 7,
+   "tcf_task": "tcf_s3",
+   "tcf_items": null,
+   "prereq_modules": [
+    "S07"
+   ],
+   "prereq_codes": [
+    "CON_OPPOSITION_CONCESSION",
+    "MOOD_SI_HYPOTHESE"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "changes position when challenged",
+    "no concession structures"
+   ],
+   "environments": [
+    "seated",
+    "driving"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "S09",
+   "component": "speaking",
+   "seq": 9,
+   "name": "Handle follow-up under pressure",
+   "clb_area": "I_interacting",
+   "can_do": "Keep fluency and accuracy while being pushed with follow-up questions, self-correcting without derailing.",
+   "nclc": 8,
+   "tcf_task": "tcf_s3",
+   "tcf_items": null,
+   "prereq_modules": [
+    "S08"
+   ],
+   "prereq_codes": [
+    "SYN_DISCOURS_INDIRECT",
+    "PRO_RELATIFS_AVANCES"
+   ],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "accuracy collapses when pushed",
+    "self-correction turns into restarting the sentence"
+   ],
+   "environments": [
+    "seated",
+    "driving"
+   ],
+   "minutes": 15
+  },
+  {
+   "id": "S10",
+   "component": "speaking",
+   "seq": 10,
+   "name": "TCF speaking under exam conditions",
+   "clb_area": "IV_information",
+   "can_do": "Deliver all three tasks in 12 minutes to the clock: 2 min interview, 5.5 min interaction, 4.5 min argued opinion.",
+   "nclc": 8,
+   "tcf_task": "tcf_s3",
+   "tcf_items": null,
+   "prereq_modules": [
+    "S09"
+   ],
+   "prereq_codes": [],
+   "activities": [
+    "model",
+    "controlled",
+    "spontaneous",
+    "timed"
+   ],
+   "evidence": {
+    "controlled_pct": 80,
+    "spontaneous": 3,
+    "timed": 2
+   },
+   "fail_signals": [
+    "runs short on task 3",
+    "preparation time misused"
+   ],
+   "environments": [
+    "seated",
+    "driving"
+   ],
+   "minutes": 15
+  }
+ ]
+}

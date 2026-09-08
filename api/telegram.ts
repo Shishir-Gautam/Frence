@@ -20,6 +20,7 @@ import { startFromZero, stage, INTRO } from "../lib/stage.js";
 import { startPractice, practiceAnswer, explainLastMiss } from "../lib/teach.js";
 import { challenge, liveAnswer, looksLikeQuestion } from "../lib/live.js";
 import { sendReadiness } from "../lib/nclc.js";
+import { isTaskId } from "../lib/task-modules.js";
 import { rescueUnit, rescueDrill } from "../lib/rescue.js";
 import { keepGoing } from "../lib/more.js";
 
@@ -97,7 +98,7 @@ async function onCommand(chatId: number, text: string) {
   const [cmd, ...args] = text.split(/\s+/);
   const c = cmd.toLowerCase().replace(/@.*$/, "");
   const paused = await quotaPaused();
-  if (paused && paused > new Date() && !["/help", "/start", "/progress", "/skip", "/next", "/exam", "/nclc", "/readiness", "/roadmap", "/codes", "/ping"].includes(c))
+  if (paused && paused > new Date() && !["/help", "/start", "/progress", "/skip", "/next", "/exam", "/nclc", "/readiness", "/roadmap", "/modules", "/state", "/codes", "/ping"].includes(c))
     return sendMessage(chatId, `⏸ Paused until ${paused.toLocaleTimeString("en-CA", { timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit" })} Toronto — Gemini's free daily quota is used up. /ping to test it early.`);
   const l = await getLearner();
   const today = localDate(l.tz);
@@ -113,6 +114,26 @@ async function onCommand(chatId: number, text: string) {
     case "/zero": { await startFromZero(); await sendMessage(chatId, INTRO); const { date, plan } = await rebuildToday(); return sendMorningCard(chatId, date, plan); }
     case "/how": return sendMessage(chatId, INTRO);
     case "/state": case "/matrix": return sendState(chatId);
+    case "/modules": {
+      const { taskBoard } = await import("../lib/task-modules.js");
+      const board = await taskBoard();
+      const ICON: Record<string, string> = { locked: "🔒", available: "⚪", introduced: "🔵", practicing: "🟡", competent: "🟢", retaining: "🟢", mastered: "✅", maintenance: "♻️" };
+      const byComp: Record<string, string[]> = {};
+      for (const m of board) (byComp[m.component] ??= []).push(`${ICON[m.state] ?? "▫️"} <code>${m.id}</code> ${esc(m.name)} <i>(NCLC ${m.nclc})</i>`);
+      const { splitTelegram } = await import("../lib/text.js");
+      const txt = `🧩 <b>Exam task map</b> — 40 fixed modules. The bot picks; nothing is invented.\n\n` +
+        Object.entries(byComp).map(([c, rows]) => `<b>${c[0].toUpperCase() + c.slice(1)}</b>\n${rows.join("\n")}`).join("\n\n") +
+        `\n\n🔒 locked · ⚪ open · 🔵 introduced · 🟡 practising · 🟢 competent · ✅ mastered · ♻️ maintenance\n<code>/module S07</code> runs one now · /state is the capability matrix.`;
+      for (const c of splitTelegram(txt)) await sendMessage(chatId, c);
+      return;
+    }
+    case "/module": {
+      const id = (args[0] ?? "").toUpperCase();
+      if (!isTaskId(id)) return sendMessage(chatId, "Which module? e.g. <code>/module S07</code> — /modules lists them.");
+      const { runModule } = await import("../lib/module-run.js");
+      return runModule(chatId, id, args[1] as any);
+    }
+    case "/watch": { const { sendWatch } = await import("../lib/module-run.js"); return sendWatch(chatId); }
     case "/more": case "/next2": return keepGoing(chatId);
     case "/roadmap": {
       const { CURRICULUM } = await import("../lib/units.js");
@@ -125,7 +146,7 @@ async function onCommand(chatId: number, text: string) {
       return;
     }
     case "/help":
-      return sendMessage(chatId, "/today /roadmap /progress /nclc /how /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/state = the capability matrix (what you can do, per skill) · /fr [an English thought] = say it in French\n/codes · /exam YYYY-MM-DD · /log 25 min podcast · /skip · /next · /more\nAny voice note = speaking feedback; any French text = writing feedback; an English question = tutor; an English statement about your day = I make you say it in French.");
+      return sendMessage(chatId, "/today /roadmap /progress /nclc /how /ping\n/review [n] · /lesson [n] · /drill CODE [method] · /grammar CODE\n/listen /read /write [w1|w2|w3] /speak [s1|s2|s3] /interview [s1|s3]\n/state = capability matrix · /modules = exam task map · /module S07 · /watch = real French video\n/fr [an English thought] = say it in French\n/codes · /exam YYYY-MM-DD · /log 25 min podcast · /skip · /next · /more\nAny voice note = speaking feedback; any French text = writing feedback; an English question = tutor; an English statement about your day = I make you say it in French.");
     case "/placement": {
       await sendMessage(chatId, "Building your placement test…");
       const items = await checks.authorPlacement();
@@ -216,6 +237,14 @@ async function onCallback(q: any) {
   }
   if (kind === "q" && a === "next") { if (!(await advance(sendQueued))) await keepGoing(chatId); return; }
   if (kind === "more" && a === "next") return keepGoing(chatId);
+  if (kind === "mod" && a === "run") { const { runModule } = await import("../lib/module-run.js"); return runModule(chatId, b, c as any); }
+  if (kind === "watch") {
+    if (a === "more") { const { sendWatch } = await import("../lib/module-run.js"); return sendWatch(chatId); }
+    await editMessage(chatId, mid, "📺 Watched — input logged.");
+    await logActivity(localDate(l.tz), "patrol", "watch", 12, true);
+    const { onItemDone } = await import("../lib/deliver.js");
+    return onItemDone("watch");
+  }
   if (kind === "huh") return a === "drill" ? rescueDrill(chatId, Number(b)) : rescueUnit(chatId, Number(b), c || "patrol");
   if (kind === "chk") {
     if (a === "mcq") return checks.answer({ pos: Number(b), mcq: Number(c), messageId: mid });

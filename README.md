@@ -15,7 +15,7 @@ api/setup.ts              apply schema + seed toolbox & grid + register webhook 
 
 lib/coach.ts              Gemini gateway: one system prompt, roles PLANNER / DRILL AUTHOR / EXAMINER / GRADER / TUTOR
 lib/coach-prompt.ts       generated from content/prompts/polyglot-coach.system.md
-lib/planner.ts            snapshot -> plan (validated against NEXT UNITS / TEACHABLE) -> timed deliveries
+lib/planner.ts            DETERMINISTIC day builder: beginner ladder / capability + task maps -> deliveries
 lib/deliver.ts            renders slots: morning card, units, drills, grammar briefs, TCF tasks, check-in
 lib/units.ts              resource router runtime: Assimil lessons + RSS episodes, gate-check hand-off
 lib/drills.ts             DRILL AUTHOR -> script -> one MP3 -> post-drive spot check
@@ -27,10 +27,13 @@ lib/grammar.ts            evidence -> mastery recompute (recency & weight, shrin
 lib/fsrs.ts + srs.ts      FSRS-4.5 (params from DB), typed-answer cards, review_log
 lib/answer.ts             accent-insensitive answer checking with an "almost" tier
 lib/progress.ts           /progress, weekly report, placement estimate
+lib/task-modules.ts       the exam axis: task-module registry -> state machine -> deterministic scheduler
+lib/module-run.ts         module EXECUTION (Gemini runs the chosen module) + /watch authentic media
 lib/nclc.ts               NCLC/TCF bands, exam_evidence -> readiness card (estimate vs validation)
 lib/live.ts               "say it in French": an English thought -> production -> evidence + card
 lib/seed.ts               schema + toolbox + grid seeding
 db/schema.sql             21 tables + 3 views (see comments)
+content/curriculum/task-modules.json  the 40 TCF task modules (CLB competency areas x TCF format)
 content/exam/tcf-canada.json         exam model
 content/grammar/competencies.json    the 44-competency grid
 content/resources/toolbox.json       the resource toolbox (environments, CLB bands, cadence, feeds)
@@ -58,6 +61,29 @@ scripts/smoke.ts          end-to-end test with Gemini + Telegram mocked (runs ag
 ## The curriculum (beginner track)
 
 `content/curriculum/beginner.json` — 40 units in 3 stages (Survival & sounds → Daily life & the past → Telling & explaining), zero → CLB 4 at one unit a day. Vocabulary order follows corpus frequency (Lonsdale & Le Bras, *A Frequency Dictionary of French*: the first ~1,000 lemmas cover ~80% of everyday text), grammar order follows the CEFR reference inventories for French (Beacco et al., *Niveau A1 / A2 pour le français*) and the CLB 1–4 descriptors, pronunciation comes first (sound discrimination gates listening and memory), and themes are the learner's own life (self-reference effect). Each unit = one lesson: **learn** (goal, new words + audio, dialogue, what to notice) → **practice** (4 guided, unscored items) → **check** (5 scored items, 80% to pass). Cards, the car drill and the evening recall reuse only that unit's material. From unit 29 one exam-format listening/reading set a day; after unit 40 (or unit 28 + listening CLB 3) the evidence-driven planner takes over. `/roadmap` shows the map; the morning card shows `Unit n/40 · Stage · streak` and a 🔥 **Start (2 min)** button (the smallest first step: the new words and their audio), and the check-in names tomorrow's first step — getting started is the hard part, so the first action is always tiny and already chosen.
+
+## Two axes: capability and exam task
+
+The system holds two module layers, because "what French can I do" and "which TCF task shape can I hold" are different questions and collapsing them loses both.
+
+| | file | asks | state |
+|---|---|---|---|
+| **Capability** | `content/curriculum/modules.json` · `lib/modules.ts` | what French you can do — joined to the 40-unit ladder, the 44-competency grid and the exam tasks | `module_state`, one cell per (module, skill), derived from evidence already collected |
+| **Exam task** | `content/curriculum/task-modules.json` · `lib/task-modules.ts` | which TCF task shape you can hold: L01–L10, R01–R10, W01–W10, S01–S10 | `task_module_state`, counted evidence per module |
+
+The exam axis is built from the CLB 2012 competency areas (interacting / instructions / getting things done / information) crossed with the fixed TCF Canada format (39 + 39 MCQ, 3 + 3 tasks) — a taxonomy taken from the frameworks, not invented. A task module is a *reusable capability*, not a lesson: S07 "express an opinion" generates a different task every time it comes up. Each carries its objective, required NCLC level, TCF task, prerequisite modules, prerequisite grammar codes, activities, pass rule and known failure modes.
+
+**States advance on counted evidence only:**
+
+```
+locked → available → introduced → practicing → competent → retaining → mastered → maintenance
+```
+
+Receptive modules become competent at ≥12 items with ≥75% accuracy; productive ones need ≥80% on controlled work **and** 3 unprompted passes **and** 2 timed passes — a failed timed attempt costs one back, and `competent` only becomes `mastered` by passing a delayed re-check, so nothing counts as learned until it has survived forgetting. A module unlocks when its prerequisite modules are competent and its prerequisite grid codes are ≥60%, which is how the grammar grid gates exam capability instead of scoring in parallel.
+
+**No model decides what you study.** `corePlan` in `lib/planner.ts` makes no planning call: the capability matrix's weakest cell picks the grammar for the car drill and the seated brief, the task-module scheduler picks the task (weakest component first, retention re-checks ahead of new work), and the mix shifts towards the exam as the date approaches — one task module a day beyond 120 days out, two inside 120, three inside 60. Gemini is called later, per item, with a closed brief (`lib/module-run.ts`): the module's objective, its failure modes, this learner's recurring flags in it, the activity to run. Execute, never choose.
+
+`/state` is the capability matrix, `/modules` the exam task map, `/module S07` runs one now, `/watch` finds a real French video at your level with Google Search grounding (a URL that exists today, not a recalled one).
 
 ## Exam readiness (NCLC), measured from day one
 

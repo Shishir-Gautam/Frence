@@ -76,6 +76,23 @@ export async function ask<T = any>(role: Role, user: string, opts: { audio?: { d
   return extractJson<T>(txt, role);
 }
 
+/**
+ * Grounded ask: same roles, but Gemini may search the live web. Used only where the answer must be a REAL,
+ * currently-online thing (a video, an article) rather than something invented — never for curriculum decisions.
+ * Google Search grounding forbids responseMimeType json, so the reply is parsed out of prose.
+ */
+export async function askGrounded<T = any>(role: Role, user: string, opts: { temperature?: number } = {}): Promise<T & { sources: string[] }> {
+  const r = await withModels(TEXT_MODELS, (model) => ai.models.generateContent({
+    model,
+    contents: [{ role: "user", parts: [{ text: user + "\n\nAnswer with JSON only." }] }],
+    config: { systemInstruction: system(role), temperature: opts.temperature ?? 0.4, tools: [{ googleSearch: {} }] },
+  }));
+  const out = extractJson<T>((r.text ?? "").trim(), role);
+  const chunks = (r as any)?.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  const sources = chunks.map((c: any) => c?.web?.uri).filter(Boolean).slice(0, 5);
+  return { ...(out as any), sources };
+}
+
 /** Parse the first complete JSON object/array in a model reply, ignoring fences, prose, or a second stray object after it. */
 export function extractJson<T = any>(txt: string, role = "model"): T {
   try { return JSON.parse(txt) as T; } catch { /* fall through */ }

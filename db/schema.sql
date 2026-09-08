@@ -279,6 +279,58 @@ CREATE TABLE IF NOT EXISTS error_patterns (
   last_seen       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ================================================== TASK MODULES =========
+-- The EXAM axis (content/curriculum/task-modules.json). The capability axis is module_state above.: 40 reusable capabilities, CLB competency areas x TCF format.
+-- Gemini never chooses a module and never invents one; the scheduler picks, Gemini executes and evaluates.
+CREATE TABLE IF NOT EXISTS task_modules (
+  id              TEXT PRIMARY KEY,             -- L01..L10, R01..R10, W01..W10, S01..S10
+  component       skill NOT NULL,
+  seq             INT NOT NULL,
+  name            TEXT NOT NULL,
+  clb_area        TEXT NOT NULL,                -- CLB 2012 competency area
+  can_do          TEXT NOT NULL,
+  nclc            INT NOT NULL,                 -- level at which this capability is required
+  tcf_task        TEXT, tcf_items TEXT,
+  prereq_modules  TEXT[] NOT NULL DEFAULT '{}',
+  prereq_codes    TEXT[] NOT NULL DEFAULT '{}',
+  activities      JSONB NOT NULL DEFAULT '[]',
+  evidence        JSONB NOT NULL DEFAULT '{}',  -- pass rule: what proves this module
+  fail_signals    JSONB NOT NULL DEFAULT '[]',
+  environments    TEXT[] NOT NULL DEFAULT '{}',
+  minutes         INT NOT NULL DEFAULT 15
+);
+
+-- One row per module. States advance on evidence only, in code -- never on a model's say-so.
+CREATE TABLE IF NOT EXISTS task_module_state (
+  module_id       TEXT PRIMARY KEY REFERENCES task_modules(id) ON DELETE CASCADE,
+  state           TEXT NOT NULL DEFAULT 'locked',   -- locked|available|introduced|practicing|competent|retaining|mastered|maintenance
+  controlled_n    INT NOT NULL DEFAULT 0,
+  controlled_ok   INT NOT NULL DEFAULT 0,
+  spontaneous_ok  INT NOT NULL DEFAULT 0,
+  timed_ok        INT NOT NULL DEFAULT 0,
+  attempts        INT NOT NULL DEFAULT 0,
+  last_score      NUMERIC(5,2),
+  last_clb        NUMERIC(4,2),
+  fail_flags      JSONB NOT NULL DEFAULT '{}',      -- {signal: count} from graded feedback
+  introduced_at   TIMESTAMPTZ,
+  last_evidence   TIMESTAMPTZ,
+  next_review     DATE,                             -- retention re-check once competent
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Every module activity that was scored. The audit trail behind a state.
+CREATE TABLE IF NOT EXISTS task_module_evidence (
+  id              SERIAL PRIMARY KEY,
+  module_id       TEXT NOT NULL REFERENCES task_modules(id) ON DELETE CASCADE,
+  activity        TEXT NOT NULL,                -- comprehension|detail_hunt|timed_set|model|controlled|spontaneous|timed
+  score_pct       NUMERIC(5,2),
+  clb             NUMERIC(4,2),
+  passed          BOOLEAN,
+  ref_table       TEXT, ref_id INT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_16_task_module_evidence ON task_module_evidence (module_id, created_at DESC);
+
 -- ================================================= PLANNING & DELIVERY ====
 CREATE TABLE IF NOT EXISTS plans (
   plan_date       DATE PRIMARY KEY,
@@ -396,3 +448,12 @@ CREATE OR REPLACE VIEW v_exam_readiness AS
            MAX(created_at)                                                      AS last_at
     FROM exam_evidence WHERE created_at > now() - interval '90 days' GROUP BY 1
   ) e ON e.component = s.skill;
+
+-- The exam-track board: every module with its state and how far its evidence has got.
+CREATE OR REPLACE VIEW v_task_module_board AS
+  SELECT m.id, m.component::text AS component, m.seq, m.name, m.nclc, m.can_do, m.tcf_task,
+         m.prereq_modules, m.prereq_codes, m.environments, m.minutes, m.evidence, m.activities, m.fail_signals,
+         COALESCE(st.state,'locked') AS state, st.controlled_n, st.controlled_ok, st.spontaneous_ok, st.timed_ok,
+         st.attempts, st.last_score, st.last_clb, st.fail_flags, st.next_review, st.last_evidence
+  FROM task_modules m LEFT JOIN task_module_state st ON st.module_id = m.id
+  ORDER BY m.component, m.seq;
